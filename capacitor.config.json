@@ -1,0 +1,11 @@
+{
+  "appId": "com.survivedance.game",
+  "appName": "Survive Dance",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

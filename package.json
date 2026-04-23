@@ -1,0 +1,20 @@
+{
+  "name": "survive-dance",
+  "version": "1.0.0",
+  "description": "Survive Dance - casual mobile game",
+  "scripts": {
+    "dev": "npx serve . -p 3000",
+    "android:init": "npx cap init 'Survive Dance' com.survivedance.game --web-dir .",
+    "android:add": "npx cap add android",
+    "android:sync": "npx cap sync",
+    "android:open": "npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "serve": "^14.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0"
+  }
+}
