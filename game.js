@@ -1,4 +1,4 @@
-// ===== 定数 =====
+// ===== CONSTANTS =====
 const W = 390, H = 844;
 const ROAD_W = 230;
 const ROAD_X = W / 2;
@@ -9,305 +9,456 @@ const SCROLL_SPEED = 3.5;
 const NUM_GATES = 7;
 const GATE_SPACING = 300;
 
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function rand(lo, hi) { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
-function choose(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+// ===== DESIGN TOKENS =====
+const C = {
+  BG:        0x070A18,
+  ROAD:      0x0B0F1E,
+  DIM:       0x10162A,
+  GRAY:      0x3A4560,
+  WHITE:     0xFFFFFF,
+  CYAN:      0x3DD8FF,
+  TEAL:      0x38FFAA,
+  PINK:      0xFF2E5C,
+  GOLD:      0xFFAD1A,
+  PURPLE:    0x9A4EFF,
+};
 
-// ===== テクスチャ生成 =====
+const FH = 'Orbitron, "Arial Black", sans-serif';
+const FB = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif';
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function rand(lo, hi)     { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
+function choose(arr)      { return arr[Math.floor(Math.random() * arr.length)]; }
+function toHex(n)         { return '#' + n.toString(16).padStart(6, '0'); }
+
+// ===== WEB AUDIO SFX =====
+const SFX = {
+  _ctx: null,
+  init() {
+    if (this._ctx) return;
+    try { this._ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  },
+  _tone(freq, type, vol, dur, freqEnd) {
+    try {
+      const ctx = this._ctx;
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime + dur);
+      gain.gain.setValueAtTime(vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + dur + 0.01);
+    } catch(e) {}
+  },
+  tap()    { this._tone(520, 'sine',      0.15, 0.08, 260); },
+  gateAdd(){ this._tone(440, 'sine',      0.22, 0.20, 880); },
+  gateMul(){ this._tone(330, 'triangle',  0.28, 0.25, 990); },
+  gateWpn(){ this._tone(280, 'sawtooth',  0.18, 0.28, 560); },
+  gateSub(){ this._tone(600, 'sawtooth',  0.18, 0.18, 200); },
+  kill()   {
+    this._tone(200, 'sawtooth', 0.25, 0.10, 60);
+    setTimeout(() => this._tone(160, 'square', 0.12, 0.12, 70), 50);
+  },
+  win() {
+    [523, 659, 784, 1047].forEach((f, i) =>
+      setTimeout(() => this._tone(f, 'sine', 0.28, 0.4, f * 1.01), i * 120)
+    );
+  },
+  lose() {
+    [380, 300, 220, 150].forEach((f, i) =>
+      setTimeout(() => this._tone(f, 'sawtooth', 0.18, 0.45, f * 0.88), i * 160)
+    );
+  },
+};
+
+// ===== SVG SPRITES =====
+function svgURI(str) {
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(str)));
+}
+
+function soldierSVG() {
+  return svgURI(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 70" width="112" height="140">
+  <ellipse cx="22" cy="67" rx="14" ry="4" fill="rgba(0,0,0,0.45)"/>
+  <rect x="11" y="50" width="10" height="9" rx="3" fill="#080912"/>
+  <rect x="23" y="50" width="10" height="9" rx="3" fill="#080912"/>
+  <rect x="12" y="51" width="8" height="2" rx="1" fill="rgba(70,90,180,0.35)"/>
+  <rect x="24" y="51" width="8" height="2" rx="1" fill="rgba(70,90,180,0.35)"/>
+  <rect x="12" y="35" width="9" height="17" rx="2" fill="#162868"/>
+  <rect x="23" y="35" width="9" height="17" rx="2" fill="#162868"/>
+  <rect x="13" y="43" width="7" height="4" rx="2" fill="#0C1838"/>
+  <rect x="24" y="43" width="7" height="4" rx="2" fill="#0C1838"/>
+  <rect x="9" y="17" width="26" height="20" rx="4" fill="#1A2C6E"/>
+  <rect x="11" y="18" width="22" height="8" rx="3" fill="rgba(90,130,255,0.15)"/>
+  <rect x="13" y="19" width="18" height="12" rx="2" fill="#111E52"/>
+  <rect x="15" y="20" width="14" height="5" rx="1.5" fill="rgba(61,216,255,0.10)"/>
+  <rect x="9"  y="35" width="26" height="4" rx="1" fill="#6A5218"/>
+  <rect x="19" y="35" width="6"  height="4" fill="#B08828"/>
+  <rect x="2"  y="18" width="8"  height="15" rx="4" fill="#1A2C6E"/>
+  <rect x="3"  y="18" width="6"  height="5"  rx="3" fill="rgba(80,120,220,0.18)"/>
+  <rect x="35" y="18" width="8"  height="15" rx="4" fill="#1A2C6E"/>
+  <rect x="41" y="20" width="14" height="4"  rx="1" fill="#181820"/>
+  <rect x="42" y="21" width="14" height="2"  rx="1" fill="rgba(50,60,100,0.5)"/>
+  <rect x="36" y="19" width="9"  height="8"  rx="2" fill="#1E1E32"/>
+  <rect x="38" y="26" width="5"  height="7"  rx="2" fill="#141425"/>
+  <rect x="18" y="12" width="8"  height="7"  rx="1" fill="#C88060"/>
+  <ellipse cx="22" cy="8"  rx="11" ry="12" fill="#1C2848"/>
+  <ellipse cx="22" cy="6"  rx="9"  ry="9"  fill="#202E58"/>
+  <rect x="11" y="9"  width="22" height="5"  rx="0" fill="#181E40"/>
+  <rect x="13" y="7"  width="18" height="8"  rx="3" fill="#080E22"/>
+  <rect x="14" y="9"  width="16" height="2.5" rx="1.2" fill="#3DD8FF" opacity="0.92"/>
+  <rect x="14" y="8"  width="8"  height="1"  rx="0.5" fill="rgba(200,240,255,0.45)"/>
+  <rect x="20" y="1"  width="4"  height="7"  rx="1" fill="rgba(61,216,255,0.20)"/>
+</svg>`);
+}
+
+function zombieSVG() {
+  return svgURI(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 74" width="104" height="148">
+  <ellipse cx="26" cy="71" rx="16" ry="5" fill="rgba(0,0,0,0.4)"/>
+  <rect x="10" y="44" width="10" height="22" rx="3" fill="#2A4418" transform="rotate(-5,15,44)"/>
+  <rect x="30" y="42" width="10" height="22" rx="3" fill="#2A4418" transform="rotate(6,35,42)"/>
+  <rect x="11" y="53" width="8" height="2.5" rx="1" fill="rgba(8,16,6,0.5)"/>
+  <rect x="31" y="51" width="8" height="2.5" rx="1" fill="rgba(8,16,6,0.5)"/>
+  <ellipse cx="16" cy="65" rx="8" ry="5" fill="#1C3410" transform="rotate(-5,16,65)"/>
+  <ellipse cx="36" cy="64" rx="8" ry="5" fill="#1C3410" transform="rotate(6,36,64)"/>
+  <rect x="8"  y="21" width="34" height="24" rx="5" fill="#2C4A1A"/>
+  <rect x="8"  y="32" width="34" height="5"  fill="rgba(8,14,5,0.38)"/>
+  <rect x="14" y="23" width="3"  height="12" rx="1" fill="rgba(8,14,5,0.32)"/>
+  <rect x="25" y="26" width="2.5" height="9" rx="1" fill="rgba(8,14,5,0.28)"/>
+  <ellipse cx="21" cy="27" rx="5" ry="4" fill="rgba(100,0,0,0.38)"/>
+  <rect x="2"  y="19" width="12" height="8"  rx="4" fill="#2C4A1A"/>
+  <circle cx="4"  cy="23" r="6"  fill="#344E1C"/>
+  <rect x="38" y="17" width="12" height="8"  rx="4" fill="#2C4A1A"/>
+  <circle cx="48" cy="21" r="6"  fill="#344E1C"/>
+  <rect x="44" y="14" width="3.5" height="8"  rx="1.5" fill="#344E1C" transform="rotate(18,46,14)"/>
+  <rect x="47" y="12" width="3.5" height="9"  rx="1.5" fill="#344E1C" transform="rotate(8,49,12)"/>
+  <rect x="18" y="14" width="14" height="9"  rx="2" fill="#344E1C"/>
+  <ellipse cx="26" cy="9"  rx="14" ry="15" fill="#364E1E"/>
+  <ellipse cx="24" cy="8"  rx="5"  ry="7"  fill="rgba(18,30,10,0.28)"/>
+  <circle cx="18" cy="8"  r="4.5" fill="#280000"/>
+  <circle cx="18" cy="8"  r="3.5" fill="#CC0000"/>
+  <circle cx="18" cy="8"  r="2.2" fill="#FF1800"/>
+  <circle cx="17" cy="7"  r="1"   fill="rgba(255,180,180,0.85)"/>
+  <circle cx="34" cy="8"  r="4.5" fill="#280000"/>
+  <circle cx="34" cy="8"  r="3.5" fill="#CC0000"/>
+  <circle cx="34" cy="8"  r="2.2" fill="#FF1800"/>
+  <circle cx="33" cy="7"  r="1"   fill="rgba(255,180,180,0.85)"/>
+  <rect x="21" y="2"  width="7"  height="3.5" rx="1" fill="rgba(100,0,0,0.55)"/>
+  <rect x="15" y="14" width="20" height="5"  rx="2" fill="#150000"/>
+  <rect x="16" y="14" width="3.5" height="3.5" rx="1" fill="rgba(215,205,195,0.8)"/>
+  <rect x="21" y="14" width="3.5" height="4.5" rx="1" fill="rgba(215,205,195,0.8)"/>
+  <rect x="26" y="14" width="3.5" height="3.5" rx="1" fill="rgba(215,205,195,0.8)"/>
+  <rect x="31" y="14" width="2.5" height="2.5" rx="1" fill="rgba(215,205,195,0.6)"/>
+</svg>`);
+}
+
+// ===== ENVIRONMENT TEXTURES =====
 function buildTextures(scene) {
   let g;
 
-  // ---- 兵士 ----
+  // Buildings far — warm/cool window mix, antenna details
   g = scene.make.graphics({ add: false });
-  // 影
-  g.fillStyle(0x000000, 0.25);
-  g.fillEllipse(12, 36, 20, 6);
-  // 脚
-  g.fillStyle(0x1a3a6e);
-  g.fillRoundedRect(4, 24, 7, 12, 2);
-  g.fillRoundedRect(13, 24, 7, 12, 2);
-  // ブーツ
-  g.fillStyle(0x111111);
-  g.fillRoundedRect(3, 33, 9, 5, 1);
-  g.fillRoundedRect(12, 33, 9, 5, 1);
-  // 胴体
-  g.fillStyle(0x2255bb);
-  g.fillRoundedRect(4, 12, 16, 14, 3);
-  // ベルト
-  g.fillStyle(0x8b6914);
-  g.fillRect(4, 23, 16, 3);
-  // 腕
-  g.fillStyle(0x2255bb);
-  g.fillRoundedRect(0, 13, 5, 10, 2);
-  g.fillRoundedRect(19, 13, 5, 10, 2);
-  // 銃
-  g.fillStyle(0x444444);
-  g.fillRoundedRect(20, 14, 10, 4, 1);
-  g.fillStyle(0x222222);
-  g.fillRect(27, 12, 2, 8);
-  // 首
-  g.fillStyle(0xffcc88);
-  g.fillRect(9, 9, 6, 5);
-  // 頭
-  g.fillStyle(0xffcc88);
-  g.fillCircle(12, 7, 7);
-  // ヘルメット
-  g.fillStyle(0x334466);
-  g.fillEllipse(12, 4, 17, 9);
-  g.fillRect(5, 5, 14, 4);
-  // 目
-  g.fillStyle(0x222244);
-  g.fillRect(8, 6, 3, 2);
-  g.fillRect(13, 6, 3, 2);
-  g.generateTexture('soldier', 32, 40);
-  g.destroy();
-
-  // ---- ゾンビ ----
-  g = scene.make.graphics({ add: false });
-  // 影
-  g.fillStyle(0x000000, 0.25);
-  g.fillEllipse(14, 42, 22, 6);
-  // 脚（ゾロゾロ歩き）
-  g.fillStyle(0x2d4a1e);
-  g.fillRoundedRect(4, 28, 8, 14, 2);
-  g.fillRoundedRect(14, 30, 8, 12, 2);
-  // ボロ服
-  g.fillStyle(0x3a5a28);
-  g.fillRoundedRect(3, 14, 20, 16, 3);
-  // 傷・汚れ
-  g.fillStyle(0x1a2e10);
-  g.fillRect(8, 16, 3, 8);
-  g.fillRect(15, 19, 2, 5);
-  // 腕（前に伸ばす）
-  g.fillStyle(0x3a5a28);
-  g.fillRoundedRect(-4, 14, 8, 6, 2);
-  g.fillRoundedRect(22, 12, 8, 6, 2);
-  // 手（腐った）
-  g.fillStyle(0x5a7a38);
-  g.fillCircle(-3, 19, 4);
-  g.fillCircle(29, 17, 4);
-  // 首
-  g.fillStyle(0x5a7a38);
-  g.fillRect(10, 10, 8, 6);
-  // 頭
-  g.fillStyle(0x5a7a38);
-  g.fillCircle(14, 7, 8);
-  // 傷口
-  g.fillStyle(0x8b0000);
-  g.fillRect(10, 5, 3, 4);
-  g.fillRect(16, 3, 2, 5);
-  // 目（赤く光る）
-  g.fillStyle(0xff0000);
-  g.fillCircle(10, 7, 3);
-  g.fillCircle(18, 7, 3);
-  g.fillStyle(0xff6666);
-  g.fillCircle(10, 7, 1.5);
-  g.fillCircle(18, 7, 1.5);
-  // 口（裂けた）
-  g.fillStyle(0x330000);
-  g.fillRect(8, 11, 12, 3);
-  g.fillStyle(0xdddddd);
-  g.fillRect(9, 11, 2, 2);
-  g.fillRect(12, 11, 2, 2);
-  g.fillRect(15, 11, 2, 2);
-  g.generateTexture('zombie', 32, 48);
-  g.destroy();
-
-  // ---- ビル（遠景）----
-  g = scene.make.graphics({ add: false });
-  g.fillStyle(0x0a0a18);
-  const blds = [
-    [0,80,50,120],[55,40,60,160],[120,90,45,110],[170,20,55,180],[230,60,50,140],[285,100,40,100],
-    [10,120,30,80],[80,70,40,130],[150,110,35,90],[200,50,45,150],[250,85,50,115],[305,30,40,170],
+  g.fillStyle(0x06081A);
+  g.fillRect(0, 0, 340, 200);
+  const farBlds = [
+    [0,60,44,140],[48,28,54,172],[106,78,40,122],[150,8,58,192],
+    [212,48,44,152],[260,68,38,132],[302,22,34,178],
+    [14,108,28,92],[84,58,34,142],[148,98,30,102],[208,38,42,162],[258,78,44,122],
   ];
-  for (const [x,y,w,h] of blds) {
+  for (const [x,y,w,h] of farBlds) {
+    g.fillStyle(0x06081A);
     g.fillRect(x, y, w, h);
-    // 窓
-    g.fillStyle(0xffffaa, 0.3);
-    for (let wy = y+10; wy < y+h-10; wy+=20) {
-      for (let wx = x+8; wx < x+w-8; wx+=14) {
-        if (Math.random() > 0.4) g.fillRect(wx, wy, 6, 8);
+    const warm = Math.random() > 0.45;
+    for (let wy = y + 12; wy < y + h - 12; wy += 22) {
+      for (let wx = x + 8; wx < x + w - 8; wx += 16) {
+        if (Math.random() > 0.36) {
+          const wc = warm
+            ? (Math.random() > 0.3 ? 0xffeeaa : 0xffd070)
+            : (Math.random() > 0.3 ? 0xaaccff : 0x88aaee);
+          g.fillStyle(wc, 0.16 + Math.random() * 0.22);
+          g.fillRect(wx, wy, 7, 10);
+        }
       }
     }
-    g.fillStyle(0x0a0a18);
+    // antenna
+    if (Math.random() > 0.5) {
+      g.fillStyle(0x3DD8FF, 0.14);
+      g.fillRect(x + w / 2 - 1.5, y - 10, 3, 14);
+      g.fillStyle(0xFF2E5C, 0.5);
+      g.fillCircle(x + w / 2, y - 10, 2);
+    }
   }
+  // horizon glow
+  g.fillGradientStyle(0x1a3060, 0x1a3060, 0x070A18, 0x070A18, 0.18, 0.18, 0, 0);
+  g.fillRect(0, 140, 340, 60);
   g.generateTexture('buildings-far', 340, 200);
   g.destroy();
 
-  // ---- ビル（近景）----
+  // Buildings near — dark silhouette + cyan trim
   g = scene.make.graphics({ add: false });
-  g.fillStyle(0x050510);
-  const blds2 = [[0,50,40,150],[45,80,35,120],[85,30,50,170],[140,70,40,130],[185,40,45,160],[235,60,40,140],[280,90,35,110],[320,20,40,180]];
-  for (const [x,y,w,h] of blds2) {
+  g.fillStyle(0x040610);
+  g.fillRect(0, 0, 360, 200);
+  const nearBlds = [
+    [0,38,36,162],[40,72,32,128],[76,22,48,178],[128,62,38,138],
+    [170,32,44,168],[218,52,38,148],[260,82,32,118],[296,12,38,188],[336,58,24,142],
+  ];
+  for (const [x,y,w,h] of nearBlds) {
+    g.fillStyle(0x040814);
     g.fillRect(x, y, w, h);
+    g.fillStyle(C.CYAN, 0.09);
+    g.fillRect(x, y, w, 3);
+    for (let wy = y + 16; wy < y + h - 10; wy += 28) {
+      for (let wx = x + 8; wx < x + w - 8; wx += 20) {
+        if (Math.random() > 0.58) {
+          g.fillStyle(0x3DD8FF, 0.09 + Math.random() * 0.12);
+          g.fillRect(wx, wy, 6, 9);
+        }
+      }
+    }
   }
   g.generateTexture('buildings-near', 360, 200);
   g.destroy();
 
-  // ---- 地面タイル ----
+  // Road tile — 3 lanes, center neon stripe
   g = scene.make.graphics({ add: false });
-  g.fillStyle(0x1c1c2e);
+  g.fillStyle(C.ROAD);
   g.fillRect(0, 0, ROAD_W, 80);
-  // 中央線
-  g.fillStyle(0xdddd00, 0.7);
-  g.fillRect(ROAD_W/2 - 2, 0, 4, 40);
-  // 縁のライン
-  g.lineStyle(3, 0xffffff, 0.4);
-  g.strokeRect(2, 0, ROAD_W - 4, 80);
+  g.fillStyle(0xFFFFFF, 0.06);
+  g.fillRect(ROAD_W * 0.33 - 1, 0, 2, 36);
+  g.fillStyle(0xFFFFFF, 0.06);
+  g.fillRect(ROAD_W * 0.66 - 1, 0, 2, 36);
+  g.fillStyle(C.CYAN, 0.20);
+  g.fillRect(ROAD_W / 2 - 1.5, 0, 3, 36);
   g.generateTexture('road-tile', ROAD_W, 80);
   g.destroy();
 
-  // ---- ゲートフレーム ----
-  for (const [key, color, glowColor] of [
-    ['gate-add',  0x00ff88, 0x00ffaa],
-    ['gate-sub',  0xff2244, 0xff4466],
-    ['gate-mul',  0xffdd00, 0xffee44],
-    ['gate-wpn',  0x44aaff, 0x88ccff],
-  ]) {
+  // Gate frames — glass morphism
+  const gateTypes = [
+    { key: 'gate-add',  border: C.TEAL,   glow: 0x38FFAA },
+    { key: 'gate-sub',  border: C.PINK,   glow: 0xFF2E5C },
+    { key: 'gate-mul',  border: C.GOLD,   glow: 0xFFAD1A },
+    { key: 'gate-wpn',  border: C.PURPLE, glow: 0x9A4EFF },
+  ];
+  const gw = 88, gh = 130;
+  for (const t of gateTypes) {
     g = scene.make.graphics({ add: false });
-    const gw = 88, gh = 130;
-    // 外グロー
-    g.fillStyle(glowColor, 0.08);
-    g.fillRoundedRect(2, 2, gw-4, gh-4, 12);
-    g.fillStyle(glowColor, 0.12);
-    g.fillRoundedRect(4, 4, gw-8, gh-8, 10);
-    // 本体
-    g.fillStyle(0x000000, 0.55);
-    g.fillRoundedRect(6, 6, gw-12, gh-12, 8);
-    // 枠線
-    g.lineStyle(3, color, 0.9);
-    g.strokeRoundedRect(6, 6, gw-12, gh-12, 8);
-    // 上部アクセントライン
-    g.lineStyle(2, glowColor, 0.6);
-    g.strokeRoundedRect(9, 9, gw-18, 28, 4);
-    g.generateTexture(key, gw, gh);
+    // outer glow halo
+    g.fillStyle(t.glow, 0.04);
+    g.fillRoundedRect(0, 0, gw, gh, 14);
+    g.fillStyle(t.glow, 0.07);
+    g.fillRoundedRect(3, 3, gw - 6, gh - 6, 12);
+    // glass body
+    g.fillStyle(0x000000, 0.62);
+    g.fillRoundedRect(6, 6, gw - 12, gh - 12, 9);
+    // top sheen
+    g.fillStyle(0xFFFFFF, 0.04);
+    g.fillRoundedRect(8, 8, gw - 16, 30, 7);
+    // border
+    g.lineStyle(2.5, t.border, 0.86);
+    g.strokeRoundedRect(6, 6, gw - 12, gh - 12, 9);
+    // type bar
+    g.fillStyle(t.border, 0.68);
+    g.fillRoundedRect(8, 8, gw - 16, 28, 6);
+    g.fillStyle(t.glow, 0.22);
+    g.fillRoundedRect(10, 10, gw - 20, 14, 4);
+    // bottom rule
+    g.lineStyle(1, t.border, 0.25);
+    g.lineBetween(14, gh - 22, gw - 14, gh - 22);
+    g.generateTexture(t.key, gw, gh);
     g.destroy();
   }
 
-  // ---- パーティクルドット ----
+  // Particle dot
   g = scene.make.graphics({ add: false });
-  g.fillStyle(0xffffff);
-  g.fillCircle(4, 4, 4);
-  g.generateTexture('particle', 8, 8);
-  g.destroy();
-
-  // ---- 爆発フレーム ----
-  g = scene.make.graphics({ add: false });
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const len = 16 + Math.random() * 10;
-    g.fillStyle(0xff6600, 0.9);
-    g.fillCircle(24 + Math.cos(angle)*len, 24 + Math.sin(angle)*len, 4);
-  }
-  g.fillStyle(0xffdd00);
-  g.fillCircle(24, 24, 10);
-  g.generateTexture('explosion', 48, 48);
+  g.fillStyle(0xFFFFFF);
+  g.fillCircle(6, 6, 6);
+  g.generateTexture('particle', 12, 12);
   g.destroy();
 }
 
-// ===== ゲートデータ =====
+// ===== GATE HELPERS =====
 function gateTexKey(data) {
   if (data.type === 'add') return data.value > 0 ? 'gate-add' : 'gate-sub';
   if (data.type === 'mul') return 'gate-mul';
   return 'gate-wpn';
 }
 function gateLabel(data) {
-  if (data.type === 'add') return (data.value > 0 ? '+' : '') + data.value + '人';
+  if (data.type === 'add') return (data.value > 0 ? '+' : '') + data.value;
   if (data.type === 'mul') return '×' + data.value;
-  return '⚔️+' + data.value;
+  return '+' + data.value;
+}
+function gateSubLabel(data) {
+  if (data.type === 'add') return data.value > 0 ? '増援' : '損失';
+  if (data.type === 'mul') return '倍増';
+  return '強化';
 }
 function gateBgColor(data) {
-  if (data.type === 'add') return data.value > 0 ? 0x00ff88 : 0xff2244;
-  if (data.type === 'mul') return 0xffdd00;
-  return 0x44aaff;
+  if (data.type === 'add') return data.value > 0 ? C.TEAL : C.PINK;
+  if (data.type === 'mul') return C.GOLD;
+  return C.PURPLE;
 }
 function makeGateData() {
   return Array.from({ length: NUM_GATES }, () => {
-    const types = ['add','add','mul','wpn'];
-    const val = t => t==='add' ? choose([-3,-2,3,5,8]) : t==='mul' ? choose([2,2,3]) : choose([1,2]);
+    const types = ['add', 'add', 'mul', 'wpn'];
+    const val = t => t === 'add' ? choose([-3, -2, 3, 5, 8])
+                   : t === 'mul' ? choose([2, 2, 3])
+                   : choose([1, 2]);
     const tL = choose(types), tR = choose(types);
     return { left: { type: tL, value: val(tL) }, right: { type: tR, value: val(tR) } };
   });
 }
 
-// ===== タイトルシーン =====
+// ===== PRELOAD SCENE =====
+class PreloadScene extends Phaser.Scene {
+  constructor() { super('Preload'); }
+
+  preload() {
+    // Show loading bar
+    const bar = this.add.rectangle(W / 2, H / 2, 0, 6, C.CYAN).setOrigin(0, 0.5);
+    bar.x = W / 2 - 160;
+    this.add.rectangle(W / 2, H / 2, 320, 10, C.DIM).setOrigin(0.5);
+    this.add.text(W / 2, H / 2 - 24, 'LOADING', {
+      fontSize: '12px', fontFamily: FH, color: toHex(C.GRAY), letterSpacing: 4
+    }).setOrigin(0.5);
+
+    this.load.on('progress', v => { bar.width = 320 * v; });
+    this.load.image('soldier', soldierSVG());
+    this.load.image('zombie',  zombieSVG());
+  }
+
+  create() {
+    buildTextures(this);
+    this.scene.start('Title');
+  }
+}
+
+// ===== TITLE SCENE =====
 class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
 
   create() {
-    buildTextures(this);
+    this.add.rectangle(W / 2, H / 2, W, H, C.BG);
 
-    // 背景
-    this.add.rectangle(W/2, H/2, W, H, 0x050510);
-    this.add.image(W/2, H*0.35, 'buildings-far').setAlpha(0.6).setDisplaySize(W, 200);
-    this.add.image(W/2, H*0.5, 'buildings-near').setAlpha(0.5).setDisplaySize(W, 200);
+    // Stars
+    for (let i = 0; i < 80; i++) {
+      const a = rand(1, 6) / 10;
+      const s = this.add.rectangle(rand(0, W), rand(0, H * 0.72), rand(1, 2), rand(1, 2), 0xffffff, a);
+      this.tweens.add({ targets: s, alpha: a * 0.12, duration: rand(900, 3200), yoyo: true, repeat: -1, delay: rand(0, 2800) });
+    }
 
-    // 霧グラデ
-    const fogGfx = this.add.graphics();
-    fogGfx.fillGradientStyle(0x050510, 0x050510, 0x050510, 0x050510, 0, 0, 0.85, 0.85);
-    fogGfx.fillRect(0, H*0.55, W, H*0.45);
+    // Parallax buildings
+    const bFar  = this.add.tileSprite(W / 2, H * 0.28, W, 200, 'buildings-far').setAlpha(0.48);
+    const bNear = this.add.tileSprite(W / 2, H * 0.40, W, 200, 'buildings-near').setAlpha(0.52);
+    this.tweens.add({ targets: bFar,  tilePositionX: { from: 0, to: 80  }, duration: 40000, repeat: -1 });
+    this.tweens.add({ targets: bNear, tilePositionX: { from: 0, to: 130 }, duration: 28000, repeat: -1 });
 
-    // 浮遊するゾンビ
-    this.floatingZombies = [];
-    for (let i = 0; i < 6; i++) {
-      const z = this.add.image(rand(30, W-30), rand(H*0.1, H*0.65), 'zombie')
-        .setAlpha(0.15 + Math.random()*0.15).setScale(1.2 + Math.random()*0.6);
-      this.floatingZombies.push(z);
+    // Road preview scroll
+    const road = this.add.tileSprite(ROAD_X, H * 0.72, ROAD_W, H * 0.55, 'road-tile').setAlpha(0.45);
+    this.tweens.add({ targets: road, tilePositionY: { from: 0, to: 80 }, duration: 1400, repeat: -1 });
+
+    // Bottom fog
+    const fog = this.add.graphics();
+    fog.fillGradientStyle(C.BG, C.BG, C.BG, C.BG, 0, 0, 1, 1);
+    fog.fillRect(0, H * 0.52, W, H * 0.48);
+
+    // Floating zombie silhouettes
+    for (let i = 0; i < 5; i++) {
+      const z = this.add.image(rand(20, W - 20), rand(H * 0.08, H * 0.58), 'zombie')
+        .setAlpha(0.08 + Math.random() * 0.08)
+        .setScale(0.38 + Math.random() * 0.22)
+        .setTint(0x2A4A18);
       this.tweens.add({
-        targets: z, y: z.y - 30 - rand(0,20), alpha: z.alpha * 0.3,
-        duration: 2500 + rand(0,2000), yoyo: true, repeat: -1,
-        ease: 'Sine.easeInOut', delay: rand(0,2000)
+        targets: z, y: z.y - rand(18, 38),
+        alpha: z.alpha * 0.25,
+        duration: 2800 + rand(0, 2200), yoyo: true, repeat: -1,
+        ease: 'Sine.easeInOut', delay: rand(0, 2600)
       });
     }
 
-    // タイトルグロー
-    const titleGlow = this.add.text(W/2, H*0.35, 'SURVIVE\nDANCE', {
-      fontSize: '60px', fontFamily: 'Arial Black, Impact, sans-serif',
-      color: '#e63946', align: 'center', lineSpacing: 4
-    }).setOrigin(0.5).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD);
+    // Title — glow + main layers
+    const tY = H * 0.30;
+    this.add.text(W / 2, tY, 'SURVIVE\nDANCE', {
+      fontSize: '58px', fontFamily: FH, color: toHex(C.PINK), align: 'center', lineSpacing: 0
+    }).setOrigin(0.5).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD);
 
-    this.add.text(W/2, H*0.35, 'SURVIVE\nDANCE', {
-      fontSize: '60px', fontFamily: 'Arial Black, Impact, sans-serif',
-      color: '#ffffff', stroke: '#e63946', strokeThickness: 5, align: 'center', lineSpacing: 4
+    const titleTxt = this.add.text(W / 2, tY, 'SURVIVE\nDANCE', {
+      fontSize: '58px', fontFamily: FH,
+      color: '#FFFFFF', stroke: toHex(C.PINK), strokeThickness: 3,
+      align: 'center', lineSpacing: 0
+    }).setOrigin(0.5);
+    this.tweens.add({ targets: titleTxt, scaleX: 1.012, scaleY: 1.012, duration: 1900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // Divider line
+    const ln = this.add.graphics();
+    ln.lineStyle(1.5, C.CYAN, 0.55);
+    ln.lineBetween(W / 2 - 110, tY + 76, W / 2 + 110, tY + 76);
+    this.tweens.add({ targets: ln, alpha: 0.18, duration: 1600, yoyo: true, repeat: -1 });
+
+    // Subtitle
+    this.add.text(W / 2, H * 0.50, '仲間を集めゾンビを全滅させろ', {
+      fontSize: '16px', fontFamily: FB, color: '#7788AA', align: 'center'
     }).setOrigin(0.5);
 
-    this.tweens.add({ targets: titleGlow, alpha: 0.6, duration: 900, yoyo: true, repeat: -1 });
+    // Start button — outline style
+    const btnY = H * 0.68;
+    const btnBg  = this.add.graphics();
+    const btnHit = this.add.rectangle(W / 2, btnY, 260, 66, 0x000000, 0).setInteractive();
+    const drawBtn = (hover) => {
+      btnBg.clear();
+      const bc = hover ? C.CYAN : C.PINK;
+      btnBg.fillStyle(0x000000, hover ? 0.35 : 0.20);
+      btnBg.fillRoundedRect(W / 2 - 130, btnY - 33, 260, 66, 10);
+      btnBg.lineStyle(2, bc, 0.88);
+      btnBg.strokeRoundedRect(W / 2 - 130, btnY - 33, 260, 66, 10);
+      if (hover) {
+        btnBg.fillStyle(bc, 0.08);
+        btnBg.fillRoundedRect(W / 2 - 130, btnY - 33, 260, 66, 10);
+      }
+    };
+    drawBtn(false);
 
-    this.add.text(W/2, H*0.54, '横にスライドして仲間を集め\nゾンビを全滅させろ！', {
-      fontSize: '20px', color: '#aaaacc', align: 'center', lineSpacing: 8
+    this.add.text(W / 2, btnY - 9, 'GAME START', {
+      fontSize: '20px', fontFamily: FH, color: '#FFFFFF', letterSpacing: 3
+    }).setOrigin(0.5);
+    this.add.text(W / 2, btnY + 13, 'ゲームスタート', {
+      fontSize: '13px', fontFamily: FB, color: toHex(C.GRAY)
     }).setOrigin(0.5);
 
-    // スタートボタン
-    const btnBg  = this.add.rectangle(W/2, H*0.70, 270, 72, 0xe63946).setInteractive();
-    const btnGlow = this.add.rectangle(W/2, H*0.70, 278, 80, 0xff6677, 0.3).setBlendMode(Phaser.BlendModes.ADD);
-    this.add.text(W/2, H*0.70, 'ゲームスタート', {
-      fontSize: '26px', fontFamily: 'Arial Black', color: '#ffffff'
-    }).setOrigin(0.5);
+    // Button pulse
+    this.tweens.add({ targets: btnHit, scaleX: 1.03, scaleY: 1.03, duration: 950, yoyo: true, repeat: -1 });
+    btnHit.on('pointerover',  () => drawBtn(true));
+    btnHit.on('pointerout',   () => drawBtn(false));
+    btnHit.on('pointerdown',  () => {
+      SFX.tap();
+      this.cameras.main.fadeOut(300, 0, 0, 0);
+      this.time.delayedCall(320, () => this.scene.start('Game'));
+    });
 
-    this.tweens.add({ targets: [btnBg, btnGlow], scaleX: 1.04, scaleY: 1.04, duration: 750, yoyo: true, repeat: -1 });
-
-    // 床のパーティクル雰囲気
-    for (let i = 0; i < 40; i++) {
-      const dot = this.add.rectangle(rand(0,W), rand(0,H), 1.5, 1.5, 0x8888aa, rand(2,6)/10);
-      this.tweens.add({ targets: dot, y: dot.y - rand(20,80), alpha: 0, duration: rand(2000,5000), delay: rand(0,3000), repeat: -1, onRepeat: () => { dot.y = rand(H*0.6, H); dot.x = rand(0, W); dot.alpha = rand(2,6)/10; } });
+    // Ambient particles
+    for (let i = 0; i < 28; i++) {
+      const p = this.add.rectangle(rand(0, W), rand(0, H), 1.5, 1.5, C.CYAN, rand(1, 4) / 10);
+      this.tweens.add({
+        targets: p, y: p.y - rand(30, 110), alpha: 0,
+        duration: rand(2500, 6500), delay: rand(0, 4500), repeat: -1,
+        onRepeat: () => { p.y = rand(H * 0.5, H); p.x = rand(0, W); p.alpha = rand(1, 4) / 10; }
+      });
     }
 
-    btnBg.on('pointerdown', () => {
-      this.cameras.main.fadeOut(350, 0, 0, 0);
-      this.time.delayedCall(370, () => this.scene.start('Game'));
-    });
-    btnBg.on('pointerover', () => btnBg.setFillStyle(0xff2244));
-    btnBg.on('pointerout',  () => btnBg.setFillStyle(0xe63946));
-
-    this.cameras.main.fadeIn(400);
+    this.add.text(W - 8, H - 8, 'v0.2', { fontSize: '10px', color: '#223355' }).setOrigin(1, 1);
+    this.cameras.main.fadeIn(450);
   }
 }
 
-// ===== ゲームシーン =====
+// ===== GAME SCENE =====
 class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    SFX.init();
     this.soldierCount = 5;
     this.weaponLevel  = 1;
     this.scrollY      = 0;
@@ -319,172 +470,170 @@ class GameScene extends Phaser.Scene {
     this.lastPointerX = W / 2;
     this.dragging     = false;
 
-    this.createBackground();
-    this.createRoad();
-    this.createGates();
-    this.createPlayerGroup();
-    this.createHUD();
-    this.setupInput();
-
+    this._createBackground();
+    this._createRoad();
+    this._createGates();
+    this._createPlayerGroup();
+    this._createHUD();
+    this._setupInput();
     this.cameras.main.fadeIn(350);
   }
 
-  createBackground() {
-    this.add.rectangle(W/2, H/2, W, H, 0x060612);
-
-    // 星
-    for (let i = 0; i < 60; i++) {
-      const s = this.add.rectangle(rand(0,W), rand(0,H*0.6), rand(1,2), rand(1,2), 0xffffff, rand(2,7)/10);
-      this.tweens.add({ targets: s, alpha: 0.05, duration: rand(800,2500), yoyo: true, repeat: -1, delay: rand(0,2000) });
+  _createBackground() {
+    this.add.rectangle(W / 2, H / 2, W, H, C.BG);
+    for (let i = 0; i < 55; i++) {
+      const a = rand(1, 5) / 10;
+      const s = this.add.rectangle(rand(0, W), rand(0, H * 0.55), rand(1, 2), rand(1, 2), 0xffffff, a);
+      this.tweens.add({ targets: s, alpha: 0.04, duration: rand(800, 2600), yoyo: true, repeat: -1, delay: rand(0, 2200) });
     }
-
-    // 遠景ビル（左右にはみ出して配置）
-    this.bgFar = this.add.tileSprite(W/2, H*0.28, W, 200, 'buildings-far').setAlpha(0.45);
-    this.bgNear = this.add.tileSprite(W/2, H*0.38, W, 200, 'buildings-near').setAlpha(0.55);
-
-    // 霞（底部）
+    this.bgFar  = this.add.tileSprite(W / 2, H * 0.24, W, 200, 'buildings-far').setAlpha(0.40);
+    this.bgNear = this.add.tileSprite(W / 2, H * 0.35, W, 200, 'buildings-near').setAlpha(0.48);
     const haze = this.add.graphics();
-    haze.fillGradientStyle(0x060612,0x060612, 0x060612,0x060612, 0,0,1,1);
-    haze.fillRect(0, H*0.42, W, H*0.1);
+    haze.fillGradientStyle(C.BG, C.BG, C.BG, C.BG, 0, 0, 1, 1);
+    haze.fillRect(0, H * 0.40, W, H * 0.12);
     haze.setDepth(2);
   }
 
-  createRoad() {
-    const roadL = ROAD_X - ROAD_W/2;
-    this.roadTile = this.add.tileSprite(ROAD_X, H/2, ROAD_W, H, 'road-tile');
-
-    // 縁グロー
-    const edgeL = this.add.rectangle(roadL,     H/2, 3, H, 0x6688ff, 0.7).setBlendMode(Phaser.BlendModes.ADD);
-    const edgeR = this.add.rectangle(roadL+ROAD_W, H/2, 3, H, 0x6688ff, 0.7).setBlendMode(Phaser.BlendModes.ADD);
-    this.tweens.add({ targets: [edgeL, edgeR], alpha: 0.2, duration: 1200, yoyo: true, repeat: -1 });
+  _createRoad() {
+    const roadL = ROAD_X - ROAD_W / 2;
+    this.roadTile = this.add.tileSprite(ROAD_X, H / 2, ROAD_W, H, 'road-tile');
+    const eL = this.add.rectangle(roadL,          H / 2, 2, H, C.CYAN, 0.50).setBlendMode(Phaser.BlendModes.ADD);
+    const eR = this.add.rectangle(roadL + ROAD_W, H / 2, 2, H, C.CYAN, 0.50).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: [eL, eR], alpha: 0.16, duration: 1400, yoyo: true, repeat: -1 });
   }
 
-  createGates() {
+  _createGates() {
     this.gateObjs = [];
-    const startWorldY = H * 0.55;
-
     for (let i = 0; i < NUM_GATES; i++) {
-      const worldY = startWorldY - i * GATE_SPACING;
+      const worldY = H * 0.55 - i * GATE_SPACING;
       const d = this.gateData[i];
-      const left  = this.buildGate(LANE_L, worldY, d.left);
-      const right = this.buildGate(LANE_R, worldY, d.right);
-      this.gateObjs.push({ left, right, worldY, passed: false });
+      this.gateObjs.push({
+        left:   this._buildGate(LANE_L, worldY, d.left),
+        right:  this._buildGate(LANE_R, worldY, d.right),
+        worldY, passed: false
+      });
     }
   }
 
-  buildGate(x, worldY, data) {
-    const texKey = gateTexKey(data);
-    const color  = gateBgColor(data);
+  _buildGate(x, worldY, data) {
+    const img = this.add.image(x, worldY, gateTexKey(data)).setScale(1.02);
+    this.tweens.add({ targets: img, scaleX: 0.97, scaleY: 0.97, duration: 1000 + rand(0, 400), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    const img = this.add.image(x, worldY, texKey).setScale(1.05);
+    const glow = this.add.ellipse(x, worldY, 100, 138, gateBgColor(data), 0.09).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: glow, alpha: 0.03, duration: 900, yoyo: true, repeat: -1 });
 
-    // パルスアニメ
-    this.tweens.add({ targets: img, scaleX: 1.0, scaleY: 1.0, duration: 900 + rand(0,400), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    // グロー（ADD合成の半透明円）
-    const glow = this.add.ellipse(x, worldY, 100, 140, color, 0.12).setBlendMode(Phaser.BlendModes.ADD);
-    this.tweens.add({ targets: glow, alpha: 0.05, duration: 700, yoyo: true, repeat: -1 });
-
-    const label = this.add.text(x, worldY - 28, gateLabel(data), {
-      fontSize: '22px', fontFamily: 'Arial Black, Impact',
-      color: '#ffffff', stroke: '#000000', strokeThickness: 4
+    const label = this.add.text(x, worldY - 24, gateLabel(data), {
+      fontSize: '26px', fontFamily: FH, color: '#FFFFFF', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5);
 
-    const subLabel = this.add.text(x, worldY + 18, data.type === 'add' ? '人数' : data.type === 'mul' ? '倍率' : '武器',
-      { fontSize: '13px', color: '#cccccc', stroke: '#000', strokeThickness: 2 }
-    ).setOrigin(0.5);
+    const sub = this.add.text(x, worldY + 21, gateSubLabel(data), {
+      fontSize: '14px', fontFamily: FB, color: toHex(gateBgColor(data)), stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
 
-    return { img, glow, label, subLabel, data, x, worldY };
+    return { img, glow, label, sub, data, x, worldY };
   }
 
-  createPlayerGroup() {
-    this.playerGroup = this.add.container(this.playerX, PLAYER_Y);
+  _createPlayerGroup() {
+    this.playerGroup   = this.add.container(this.playerX, PLAYER_Y);
     this.soldierImages = [];
-    this.rebuildSoldiers();
+    this._rebuildSoldiers();
   }
 
-  rebuildSoldiers() {
+  _rebuildSoldiers() {
     this.playerGroup.removeAll(true);
     this.soldierImages = [];
 
     const count = clamp(this.soldierCount, 1, 50);
-    const cols = Math.min(count, 5);
-    const rows = Math.ceil(count / cols);
-    const sx = 26, sy = 28;
-    let placed = 0;
+    const cols   = Math.min(count, 6);
+    const arcR   = 20 + cols * 4;
 
-    for (let r = 0; r < rows && placed < count; r++) {
-      for (let c = 0; c < cols && placed < count; c++) {
-        const ox = (c - (cols-1)/2) * sx;
-        const oy = (r - (rows-1)/2) * sy;
-        const img = this.make.image({ x: ox, y: oy, key: 'soldier', add: false });
-        img.setScale(0.85);
-        this.playerGroup.add(img);
-        this.soldierImages.push({ img, baseY: oy, phase: placed * 0.4 });
-        placed++;
+    for (let i = 0; i < count; i++) {
+      let ox, oy;
+      if (i < cols) {
+        const a = ((i / (cols - 1 || 1)) - 0.5) * Math.PI * 0.7;
+        ox = Math.sin(a) * arcR;
+        oy = -Math.cos(a) * arcR * 0.38;
+      } else {
+        const row = Math.floor((i - cols) / cols) + 1;
+        const col = (i - cols) % cols;
+        const a   = ((col / (cols - 1 || 1)) - 0.5) * Math.PI * 0.55;
+        ox = Math.sin(a) * arcR * 0.82;
+        oy = row * 28;
       }
+      const img = this.make.image({ x: ox, y: oy, key: 'soldier', add: false });
+      img.setScale(0.50);
+      this.playerGroup.add(img);
+      this.soldierImages.push({ img, baseY: oy, phase: i * 0.44 });
     }
 
-    // 武器レベル表示
-    const wpnTxt = this.make.text({
-      x: 0, y: rows * sy / 2 + 16,
-      text: '⚔️'.repeat(Math.min(this.weaponLevel, 5)),
-      style: { fontSize: '14px' }, add: false
-    });
-    wpnTxt.setOrigin(0.5);
-    this.playerGroup.add(wpnTxt);
+    // Weapon dots
+    const dotY = (Math.ceil(count / cols)) * 28 + 18;
+    const wl   = Math.min(this.weaponLevel, 8);
+    for (let i = 0; i < wl; i++) {
+      const dot = this.make.graphics({ add: false });
+      dot.fillStyle(C.GOLD, 1);
+      dot.fillCircle(0, 0, 4);
+      dot.x = (i - wl / 2 + 0.5) * 11;
+      dot.y = dotY;
+      this.playerGroup.add(dot);
+    }
 
-    // 人数バッジ
+    // Count badge
     const badge = this.make.text({
-      x: 0, y: -rows * sy / 2 - 22,
-      text: '×' + count,
-      style: { fontSize: '20px', fontFamily:'Arial Black', color:'#ffffff', stroke:'#000', strokeThickness:3 },
+      x: 0, y: -arcR - 24,
+      text: count.toString(),
+      style: { fontSize: '22px', fontFamily: FH, color: '#FFFFFF', stroke: '#000', strokeThickness: 3 },
       add: false
     });
     badge.setOrigin(0.5);
     this.playerGroup.add(badge);
-    this.soldierBadge = badge;
   }
 
-  createHUD() {
-    // 上部パネル
-    const hudBg = this.add.graphics();
-    hudBg.fillStyle(0x000000, 0.7);
-    hudBg.fillRect(0, 0, W, 72);
-    hudBg.lineStyle(1, 0x334466, 0.8);
-    hudBg.strokeRect(0, 71, W, 1);
-    hudBg.setDepth(10);
+  _createHUD() {
+    const hudH = 72;
+    const hud = this.add.graphics().setDepth(20);
+    hud.fillStyle(0x000000, 0.80);
+    hud.fillRect(0, 0, W, hudH);
+    hud.lineStyle(1, C.CYAN, 0.20);
+    hud.lineBetween(0, hudH, W, hudH);
 
-    this.hudSoldier = this.add.text(W/2 - 70, 20, '', {
-      fontSize: '20px', color: '#44ffaa', fontFamily: 'Arial Black', stroke:'#002211', strokeThickness:3
-    }).setOrigin(0.5).setDepth(11);
+    this.add.text(16, 13, 'TROOPS', {
+      fontSize: '9px', fontFamily: FH, color: toHex(C.TEAL), letterSpacing: 2
+    }).setDepth(21);
+    this.hudSoldier = this.add.text(16, 26, '5', {
+      fontSize: '28px', fontFamily: FH, color: toHex(C.TEAL), stroke: '#000', strokeThickness: 2
+    }).setDepth(21);
 
-    this.hudWeapon = this.add.text(W/2 + 70, 20, '', {
-      fontSize: '20px', color: '#ffdd44', fontFamily: 'Arial Black', stroke:'#221100', strokeThickness:3
-    }).setOrigin(0.5).setDepth(11);
+    this.add.text(W - 16, 13, 'POWER', {
+      fontSize: '9px', fontFamily: FH, color: toHex(C.GOLD), letterSpacing: 2
+    }).setOrigin(1, 0).setDepth(21);
+    this.hudWeapon = this.add.text(W - 16, 26, 'LV.1', {
+      fontSize: '28px', fontFamily: FH, color: toHex(C.GOLD), stroke: '#000', strokeThickness: 2
+    }).setOrigin(1, 0).setDepth(21);
 
-    // プログレスバー
-    this.add.rectangle(W/2, 54, W-40, 9, 0x112233).setDepth(11);
-    this.progFill = this.add.rectangle(20, 54, 1, 7, 0x22ccff).setOrigin(0, 0.5).setDepth(12);
-    this.add.text(W/2, 54, 'ゴールまで', { fontSize: '10px', color: '#8899bb' }).setOrigin(0.5).setDepth(13);
+    this.add.rectangle(W / 2, 58, W - 100, 6, C.DIM).setDepth(21);
+    this.progFill = this.add.rectangle(52, 55, 0, 4, C.CYAN).setOrigin(0, 0).setDepth(22);
+    this.add.text(W / 2, 58, 'MISSION', {
+      fontSize: '8px', fontFamily: FH, color: '#2A3850', letterSpacing: 3
+    }).setOrigin(0.5).setDepth(23);
 
-    this.updateHUD();
+    this._updateHUD();
   }
 
-  updateHUD() {
-    this.hudSoldier.setText('👥 ' + this.soldierCount + '人');
-    this.hudWeapon.setText('⚔️ Lv.' + this.weaponLevel);
-    const maxW = W - 42;
-    const progress = this.gatesPassed / NUM_GATES;
-    this.tweens.add({ targets: this.progFill, width: progress * maxW, duration: 300, ease: 'Power2' });
+  _updateHUD() {
+    this.hudSoldier.setText(this.soldierCount.toString());
+    this.hudWeapon.setText('LV.' + this.weaponLevel);
+    const maxW = W - 106;
+    const prog = this.gatesPassed / NUM_GATES;
+    this.tweens.add({ targets: this.progFill, width: prog * maxW, duration: 300, ease: 'Power2' });
   }
 
-  setupInput() {
+  _setupInput() {
     this.input.on('pointerdown', p => { this.dragging = true; this.lastPointerX = p.x; });
     this.input.on('pointermove', p => {
       if (!this.dragging) return;
       const dx = p.x - this.lastPointerX;
-      this.targetX = clamp(this.targetX + dx * 1.3, ROAD_X - ROAD_W/2 + 50, ROAD_X + ROAD_W/2 - 50);
+      this.targetX = clamp(this.targetX + dx * 1.3, ROAD_X - ROAD_W / 2 + 50, ROAD_X + ROAD_W / 2 - 50);
       this.lastPointerX = p.x;
     });
     this.input.on('pointerup', () => { this.dragging = false; });
@@ -494,42 +643,34 @@ class GameScene extends Phaser.Scene {
     if (this.phase !== 'run') return;
 
     this.scrollY += SCROLL_SPEED;
-
-    // パララックス
-    this.bgFar.tilePositionY  -= SCROLL_SPEED * 0.15;
-    this.bgNear.tilePositionY -= SCROLL_SPEED * 0.3;
+    this.bgFar.tilePositionY   -= SCROLL_SPEED * 0.12;
+    this.bgNear.tilePositionY  -= SCROLL_SPEED * 0.28;
     this.roadTile.tilePositionY -= SCROLL_SPEED;
 
-    // プレイヤー移動
     this.playerX += (this.targetX - this.playerX) * 0.14;
     this.playerGroup.x = this.playerX;
 
-    // 兵士の歩きアニメ
     for (const s of this.soldierImages) {
-      s.img.y = s.baseY + Math.sin(time * 0.006 + s.phase) * 3;
+      s.img.y = s.baseY + Math.sin(time * 0.006 + s.phase) * 2.5;
     }
 
-    // ゲートスクロール＆判定
     for (const go of this.gateObjs) {
-      const sy = go.worldY + this.scrollY;
-      const vis = sy > -80 && sy < H + 80;
-
+      const sy  = go.worldY + this.scrollY;
+      const vis = sy > -100 && sy < H + 100;
       for (const side of [go.left, go.right]) {
         side.img.setVisible(vis).setY(sy);
         side.glow.setVisible(vis).setY(sy);
-        side.label.setVisible(vis).setY(sy - 28);
-        side.subLabel.setVisible(vis).setY(sy + 18);
+        side.label.setVisible(vis).setY(sy - 24);
+        side.sub.setVisible(vis).setY(sy + 21);
       }
-
-      if (!go.passed && Math.abs(sy - PLAYER_Y) < 32) {
+      if (!go.passed && Math.abs(sy - PLAYER_Y) < 34) {
         go.passed = true;
         this.gatesPassed++;
-        const dL = Math.abs(this.playerX - go.left.x);
-        const dR = Math.abs(this.playerX - go.right.x);
-        const chosen = dL <= dR ? go.left : go.right;
-        this.applyGate(chosen.data);
-        this.gatePassEffect(chosen, sy);
-        this.updateHUD();
+        const chosen = Math.abs(this.playerX - go.left.x) <= Math.abs(this.playerX - go.right.x)
+          ? go.left : go.right;
+        this._applyGate(chosen.data);
+        this._gatePassFX(chosen, sy);
+        this._updateHUD();
       }
     }
 
@@ -544,299 +685,351 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  applyGate(data) {
+  _applyGate(data) {
     if      (data.type === 'add') this.soldierCount = clamp(this.soldierCount + data.value, 1, 60);
     else if (data.type === 'mul') this.soldierCount = clamp(this.soldierCount * data.value, 1, 60);
-    else                          this.weaponLevel  = clamp(this.weaponLevel + data.value, 1, 10);
-    this.rebuildSoldiers();
+    else                          this.weaponLevel  = clamp(this.weaponLevel  + data.value, 1, 10);
+    this._rebuildSoldiers();
+    if      (data.type === 'add' && data.value > 0) SFX.gateAdd();
+    else if (data.type === 'add' && data.value < 0) SFX.gateSub();
+    else if (data.type === 'mul')                   SFX.gateMul();
+    else                                            SFX.gateWpn();
   }
 
-  gatePassEffect(gate, screenY) {
-    // スケールバースト
+  _gatePassFX(gate, sy) {
     this.tweens.add({
-      targets: gate.img, scaleX: 1.6, scaleY: 1.6, alpha: 0,
-      duration: 350, ease: 'Power3',
-      onComplete: () => { gate.img.alpha = 1; gate.img.scaleX = 1.05; gate.img.scaleY = 1.05; }
+      targets: gate.img, scaleX: 1.5, scaleY: 1.5, alpha: 0, duration: 300, ease: 'Power3',
+      onComplete: () => { gate.img.alpha = 1; gate.img.scaleX = gate.img.scaleY = 1.02; }
     });
 
-    // フローティングテキスト
-    const pop = this.add.text(gate.img.x, screenY - 10, gateLabel(gate.data), {
-      fontSize: '32px', fontFamily: 'Arial Black', color:'#ffffff', stroke:'#000', strokeThickness:5
+    const pop = this.add.text(gate.img.x, sy - 12, gateLabel(gate.data), {
+      fontSize: '36px', fontFamily: FH, color: '#FFFFFF', stroke: '#000', strokeThickness: 5
     }).setOrigin(0.5);
-    this.tweens.add({ targets: pop, y: screenY - 80, alpha: 0, duration: 800, ease: 'Power2', onComplete: () => pop.destroy() });
+    this.tweens.add({ targets: pop, y: sy - 95, alpha: 0, duration: 900, ease: 'Power2', onComplete: () => pop.destroy() });
 
-    // パーティクルバースト
     const color = gateBgColor(gate.data);
-    for (let i = 0; i < 18; i++) {
-      const angle = (i / 18) * Math.PI * 2;
-      const speed = 60 + rand(0, 80);
-      const p = this.add.circle(gate.img.x, screenY, 4, color).setBlendMode(Phaser.BlendModes.ADD);
+    for (let i = 0; i < 22; i++) {
+      const ang = (i / 22) * Math.PI * 2;
+      const spd = 65 + rand(0, 90);
+      const p = this.add.circle(gate.img.x, sy, 4 + rand(0, 3), color).setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
         targets: p,
-        x: gate.img.x + Math.cos(angle) * speed,
-        y: screenY   + Math.sin(angle) * speed,
-        alpha: 0, scale: 0.2, duration: 500 + rand(0,300),
+        x: gate.img.x + Math.cos(ang) * spd,
+        y: sy          + Math.sin(ang) * spd,
+        alpha: 0, scale: 0.12, duration: 520 + rand(0, 300),
         onComplete: () => p.destroy()
       });
     }
 
-    // 画面フラッシュ
-    const flash = this.add.rectangle(W/2, H/2, W, H, color, 0.18);
-    this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
+    const ring = this.add.graphics();
+    ring.lineStyle(3, color, 0.88);
+    ring.strokeCircle(gate.img.x, sy, 10);
+    this.tweens.add({ targets: ring, scaleX: 5, scaleY: 5, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
+
+    const flash = this.add.rectangle(W / 2, H / 2, W, H, color, 0.14).setDepth(30);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
   }
 }
 
-// ===== バトルシーン =====
+// ===== BATTLE SCENE =====
 class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
-
   init(data) { this.soldiers = data.soldiers; this.weaponLevel = data.weaponLevel; }
 
   create() {
     this.cameras.main.fadeIn(400);
 
-    // 背景
-    this.add.rectangle(W/2, H/2, W, H, 0x100a0a);
-    this.add.image(W/2, H*0.25, 'buildings-far').setAlpha(0.3).setTint(0xff3333).setDisplaySize(W, 200);
-    this.add.image(W/2, H*0.38, 'buildings-near').setAlpha(0.3).setTint(0xaa2222).setDisplaySize(W, 200);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x0E0608);
+    this.add.tileSprite(W / 2, H * 0.22, W, 200, 'buildings-far').setAlpha(0.25).setTint(0xFF3333);
+    this.add.tileSprite(W / 2, H * 0.36, W, 200, 'buildings-near').setAlpha(0.25).setTint(0xCC1818);
 
-    const roadL = ROAD_X - ROAD_W/2;
-    this.add.rectangle(ROAD_X, H/2, ROAD_W, H, 0x1c0a0a);
-    this.add.rectangle(roadL,       H/2, 3, H, 0xff4444, 0.5).setBlendMode(Phaser.BlendModes.ADD);
-    this.add.rectangle(roadL+ROAD_W, H/2, 3, H, 0xff4444, 0.5).setBlendMode(Phaser.BlendModes.ADD);
+    const roadL = ROAD_X - ROAD_W / 2;
+    this.add.rectangle(ROAD_X, H / 2, ROAD_W, H, 0x160808);
+    this.add.rectangle(roadL,          H / 2, 2, H, C.PINK, 0.48).setBlendMode(Phaser.BlendModes.ADD);
+    this.add.rectangle(roadL + ROAD_W, H / 2, 2, H, C.PINK, 0.48).setBlendMode(Phaser.BlendModes.ADD);
 
-    this.add.text(W/2, 44, '⚔️  BATTLE  ⚔️', {
-      fontSize: '30px', fontFamily: 'Arial Black', color:'#ff4444', stroke:'#000', strokeThickness:5
-    }).setOrigin(0.5);
+    // Header
+    const hdr = this.add.graphics().setDepth(20);
+    hdr.fillStyle(0x000000, 0.75);
+    hdr.fillRect(0, 0, W, 68);
+    hdr.lineStyle(1, C.PINK, 0.30);
+    hdr.lineBetween(0, 68, W, 68);
+    this.add.text(W / 2, 34, 'BATTLE', {
+      fontSize: '26px', fontFamily: FH, color: toHex(C.PINK), letterSpacing: 10
+    }).setOrigin(0.5).setDepth(21);
 
     const zombieCount = clamp(Math.floor(this.soldiers * 0.7 + rand(3, 10)), 3, 60);
-    this.createZombieGroup(zombieCount);
-    this.createSoldierGroup();
-    this.runBattle();
+    this._createZombies(zombieCount);
+    this._createSoldiers();
+    this._runBattle();
   }
 
-  createZombieGroup(count) {
+  _createZombies(count) {
     this.zombieSprites = [];
     const cols = Math.min(count, 6), rows = Math.ceil(count / cols);
-    const sx = 34, sy = 36;
     let placed = 0;
-
     for (let r = 0; r < rows && placed < count; r++) {
       for (let c = 0; c < cols && placed < count; c++) {
-        const x = ROAD_X + (c - (cols-1)/2) * sx;
-        const y = H * 0.22 + r * sy;
-        const img = this.add.image(x, y, 'zombie').setScale(0.9);
-        // 目のグロー
-        const eyeGlow = this.add.ellipse(x, y - 12, 22, 8, 0xff0000, 0.25).setBlendMode(Phaser.BlendModes.ADD);
-        this.tweens.add({ targets: eyeGlow, alpha: 0.05, duration: 400 + rand(0,300), yoyo:true, repeat:-1 });
-        this.zombieSprites.push({ img, eyeGlow, alive: true });
+        const x = ROAD_X + (c - (cols - 1) / 2) * 34;
+        const y = H * 0.20 + r * 38 + 70;
+        const img = this.add.image(x, y, 'zombie').setScale(0.50);
+        const eg  = this.add.ellipse(x, y - 14, 26, 10, 0xFF0000, 0.20).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: eg, alpha: 0.04, duration: 400 + rand(0, 300), yoyo: true, repeat: -1 });
+        this.zombieSprites.push({ img, eg, alive: true });
         placed++;
       }
     }
     this.initZombieCount = count;
-
-    this.zombieCounter = this.add.text(W/2, H*0.13, '🧟 × ' + count, {
-      fontSize: '26px', fontFamily:'Arial Black', color:'#88ff88', stroke:'#000', strokeThickness:4
+    this.zombieCtr = this.add.text(W / 2, H * 0.11, count.toString(), {
+      fontSize: '34px', fontFamily: FH, color: '#EE3344', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5);
+    this.add.text(W / 2, H * 0.11 + 30, 'ZOMBIES', {
+      fontSize: '9px', fontFamily: FH, color: '#882233', letterSpacing: 4
     }).setOrigin(0.5);
   }
 
-  createSoldierGroup() {
+  _createSoldiers() {
     this.soldierSprites = [];
     const count = this.soldiers;
-    const cols = Math.min(count, 6), rows = Math.ceil(count / cols);
-    const sx = 30, sy = 30;
+    const cols  = Math.min(count, 6), rows = Math.ceil(count / cols);
     let placed = 0;
-
     for (let r = 0; r < rows && placed < count; r++) {
       for (let c = 0; c < cols && placed < count; c++) {
-        const x = ROAD_X + (c - (cols-1)/2) * sx;
-        const y = H * 0.80 - r * sy;
-        const img = this.add.image(x, y, 'soldier').setScale(0.9);
-        this.soldierSprites.push({ img, alive: true });
+        const x = ROAD_X + (c - (cols - 1) / 2) * 30;
+        const y = H * 0.82 - r * 30;
+        this.soldierSprites.push({ img: this.add.image(x, y, 'soldier').setScale(0.50), alive: true });
         placed++;
       }
     }
-
-    this.soldierCounter = this.add.text(W/2, H*0.90, '👥 × ' + count, {
-      fontSize: '26px', fontFamily:'Arial Black', color:'#44aaff', stroke:'#000', strokeThickness:4
+    this.soldierCtr = this.add.text(W / 2, H * 0.92, count.toString(), {
+      fontSize: '34px', fontFamily: FH, color: toHex(C.CYAN), stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5);
+    this.add.text(W / 2, H * 0.92 + 30, 'TROOPS', {
+      fontSize: '9px', fontFamily: FH, color: '#1A5070', letterSpacing: 4
     }).setOrigin(0.5);
 
-    this.vsText = this.add.text(W/2, H*0.52, 'VS', {
-      fontSize: '48px', fontFamily:'Arial Black', color:'#ffdd00', stroke:'#000', strokeThickness:6, alpha:0
-    }).setOrigin(0.5);
-    this.tweens.add({ targets: this.vsText, alpha: 1, scaleX:1.3, scaleY:1.3, duration:400, yoyo:true, repeat:0 });
+    const vs = this.add.text(W / 2, H * 0.52, 'VS', {
+      fontSize: '52px', fontFamily: FH, color: toHex(C.GOLD), stroke: '#000', strokeThickness: 6
+    }).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets: vs, alpha: 1, scaleX: 1.22, scaleY: 1.22, duration: 320, yoyo: true });
   }
 
-  runBattle() {
-    let soldierHP = this.soldiers * (1 + this.weaponLevel * 0.6);
-    let zombieHP  = this.initZombieCount * 3;
-    const soldierMaxHP = soldierHP;
-    const zombieMaxHP  = zombieHP;
+  _runBattle() {
+    let sHP = this.soldiers * (1 + this.weaponLevel * 0.6);
+    let zHP = this.initZombieCount * 3;
+    const sMax = sHP, zMax = zHP;
 
     const tick = () => {
-      if (soldierHP <= 0 || zombieHP <= 0) { this.endBattle(soldierHP > 0); return; }
+      if (sHP <= 0 || zHP <= 0) { this._endBattle(sHP > 0); return; }
 
-      const atkP = (1 + this.weaponLevel * 0.9) * (0.75 + Math.random() * 0.5);
-      const atkZ = 2.5 * (0.75 + Math.random() * 0.5);
-      zombieHP  -= atkP;
-      soldierHP -= atkZ;
-      soldierHP  = Math.max(0, soldierHP);
-      zombieHP   = Math.max(0, zombieHP);
+      zHP = Math.max(0, zHP - (1 + this.weaponLevel * 0.9) * (0.75 + Math.random() * 0.5));
+      sHP = Math.max(0, sHP - 2.5 * (0.75 + Math.random() * 0.5));
 
-      // ゾンビ消す
-      const aliveZ = this.zombieSprites.filter(z => z.alive);
-      const expectZ = Math.ceil((zombieHP / zombieMaxHP) * this.initZombieCount);
-      while (aliveZ.length > expectZ && aliveZ.length > 0) {
-        const idx = rand(0, aliveZ.length - 1);
-        const z = aliveZ.splice(idx, 1)[0];
+      const aliveZ  = this.zombieSprites.filter(z => z.alive);
+      const expectZ = Math.ceil((zHP / zMax) * this.initZombieCount);
+      while (aliveZ.length > expectZ) {
+        const z = aliveZ.splice(rand(0, aliveZ.length - 1), 1)[0];
         z.alive = false;
-        this.killEffect(z.img.x, z.img.y, 0x44aa44);
-        this.tweens.add({ targets: [z.img, z.eyeGlow], alpha: 0, scaleY: 0, duration: 250 });
-        this.zombieCounter.setText('🧟 × ' + this.zombieSprites.filter(z=>z.alive).length);
+        SFX.kill();
+        this._killFX(z.img.x, z.img.y, C.TEAL);
+        this.tweens.add({ targets: [z.img, z.eg], alpha: 0, scaleY: 0.1, duration: 200 });
+        this.zombieCtr.setText(this.zombieSprites.filter(z => z.alive).length.toString());
       }
 
-      // 兵士消す
-      const aliveS = this.soldierSprites.filter(s => s.alive);
-      const expectS = Math.ceil((soldierHP / soldierMaxHP) * this.soldiers);
-      while (aliveS.length > expectS && aliveS.length > 0) {
-        const idx = rand(0, aliveS.length - 1);
-        const s = aliveS.splice(idx, 1)[0];
+      const aliveS  = this.soldierSprites.filter(s => s.alive);
+      const expectS = Math.ceil((sHP / sMax) * this.soldiers);
+      while (aliveS.length > expectS) {
+        const s = aliveS.splice(rand(0, aliveS.length - 1), 1)[0];
         s.alive = false;
-        this.killEffect(s.img.x, s.img.y, 0x4488ff);
-        this.tweens.add({ targets: s.img, alpha: 0, scaleY: 0, duration: 250 });
-        this.soldierCounter.setText('👥 × ' + this.soldierSprites.filter(s=>s.alive).length);
+        this._killFX(s.img.x, s.img.y, C.CYAN);
+        this.tweens.add({ targets: s.img, alpha: 0, scaleY: 0.1, duration: 200 });
+        this.soldierCtr.setText(this.soldierSprites.filter(s => s.alive).length.toString());
       }
 
-      // 画面揺らし
-      this.cameras.main.shake(80, 0.006);
-
+      this.cameras.main.shake(90, 0.006);
       this.time.delayedCall(200, tick);
     };
-
     this.time.delayedCall(900, tick);
   }
 
-  killEffect(x, y, color) {
-    // 爆発パーティクル
-    for (let i = 0; i < 12; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 30 + Math.random() * 50;
-      const p = this.add.circle(x, y, 3 + Math.random()*4, color).setBlendMode(Phaser.BlendModes.ADD);
+  _killFX(x, y, color) {
+    for (let i = 0; i < 14; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 28 + Math.random() * 55;
+      const p = this.add.circle(x, y, 3 + Math.random() * 4, color).setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
         targets: p,
-        x: x + Math.cos(angle)*speed, y: y + Math.sin(angle)*speed,
-        alpha: 0, scale: 0.3, duration: 400 + rand(0,200),
+        x: x + Math.cos(ang) * spd, y: y + Math.sin(ang) * spd,
+        alpha: 0, scale: 0.2, duration: 350 + rand(0, 200),
         onComplete: () => p.destroy()
       });
     }
-    // フラッシュ
-    const flash = this.add.circle(x, y, 20, color, 0.6).setBlendMode(Phaser.BlendModes.ADD);
-    this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 200, onComplete: () => flash.destroy() });
+    const fl = this.add.circle(x, y, 22, color, 0.52).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: fl, alpha: 0, scale: 2.2, duration: 170, onComplete: () => fl.destroy() });
   }
 
-  endBattle(won) {
+  _endBattle(won) {
     const survivors = this.soldierSprites.filter(s => s.alive).length;
     this.time.delayedCall(800, () => {
       this.cameras.main.fadeOut(400, 0, 0, 0);
-      this.time.delayedCall(420, () =>
-        this.scene.start('Result', { won, survivors })
-      );
+      this.time.delayedCall(420, () => this.scene.start('Result', { won, survivors }));
     });
   }
 }
 
-// ===== リザルトシーン =====
+// ===== RESULT SCENE =====
 class ResultScene extends Phaser.Scene {
   constructor() { super('Result'); }
   init(data) { this.won = data.won; this.survivors = data.survivors; }
 
   create() {
-    this.cameras.main.fadeIn(450);
+    this.cameras.main.fadeIn(500);
+    this.won ? SFX.win() : SFX.lose();
 
-    this.add.rectangle(W/2, H/2, W, H, this.won ? 0x040d04 : 0x0d0404);
-    this.add.image(W/2, H*0.3, 'buildings-far')
-      .setAlpha(0.25).setDisplaySize(W, 200)
-      .setTint(this.won ? 0x44ff88 : 0xff4444);
+    this.add.rectangle(W / 2, H / 2, W, H, this.won ? 0x050D08 : 0x0D0505);
+    this.add.tileSprite(W / 2, H * 0.26, W, 200, 'buildings-far')
+      .setAlpha(0.20).setTint(this.won ? 0x44FF88 : 0xFF4444);
 
-    if (this.won) this.fireworks();
-    else          this.darkParticles();
+    this.won ? this._fireworks() : this._darkAmbience();
 
-    const emoji = this.won ? '🎉' : '💀';
-    const title = this.won ? 'CLEAR!' : 'GAME OVER';
-    const col   = this.won ? '#aaff66' : '#ff4444';
-    const glow  = this.won ? 0x44ff44  : 0xff0000;
+    const col  = toHex(this.won ? C.TEAL : C.PINK);
+    const word = this.won ? 'COMPLETE' : 'OVER';
+    const tag  = this.won ? 'MISSION' : 'GAME';
 
-    // タイトルグロー
-    this.add.text(W/2, H*0.32, title, {
-      fontSize: '64px', fontFamily:'Arial Black', color: col, alpha:0.25
-    }).setOrigin(0.5).setBlendMode(Phaser.BlendModes.ADD);
-
-    this.add.text(W/2, H*0.24, emoji, { fontSize: '80px' }).setOrigin(0.5);
-    this.add.text(W/2, H*0.36, title, {
-      fontSize: '60px', fontFamily:'Arial Black', color: col, stroke:'#000', strokeThickness:6
+    this.add.text(W / 2, H * 0.22, tag, {
+      fontSize: '14px', fontFamily: FH, color: col, letterSpacing: 10
     }).setOrigin(0.5);
 
+    // Glow
+    this.add.text(W / 2, H * 0.32, word, {
+      fontSize: '68px', fontFamily: FH, color: col
+    }).setOrigin(0.5).setAlpha(0.16).setBlendMode(Phaser.BlendModes.ADD);
+
+    const mainTxt = this.add.text(W / 2, H * 0.34, word, {
+      fontSize: '68px', fontFamily: FH, color: '#FFFFFF', stroke: col, strokeThickness: 4
+    }).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets: mainTxt, alpha: 1, y: H * 0.32, duration: 550, ease: 'Back.easeOut' });
+
+    // Divider
+    const ln = this.add.graphics();
+    ln.lineStyle(1.5, this.won ? C.TEAL : C.PINK, 0.45);
+    ln.lineBetween(W / 2 - 120, H * 0.43, W / 2 + 120, H * 0.43);
+
     if (this.won) {
-      this.add.text(W/2, H*0.50, '生存者  ' + this.survivors + '  人', {
-        fontSize: '30px', fontFamily:'Arial Black', color:'#aaffcc', stroke:'#000', strokeThickness:4
+      this.add.text(W / 2, H * 0.50, 'SURVIVORS', {
+        fontSize: '10px', fontFamily: FH, color: toHex(C.GRAY), letterSpacing: 4
       }).setOrigin(0.5);
+      this.add.text(W / 2, H * 0.57, this.survivors.toString(), {
+        fontSize: '54px', fontFamily: FH, color: toHex(C.TEAL), stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5);
+      // Star rating
+      const stars = this.survivors > 15 ? 3 : this.survivors > 5 ? 2 : 1;
+      for (let i = 0; i < 3; i++) {
+        const sx = W / 2 + (i - 1) * 52;
+        const sg = this.add.graphics();
+        sg.fillStyle(i < stars ? C.GOLD : C.GRAY, i < stars ? 1 : 0.25);
+        this._drawStar(sg, sx, H * 0.68, 18, 8);
+        if (i < stars) {
+          const gl = this.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+          gl.fillStyle(C.GOLD, 0.22);
+          this._drawStar(gl, sx, H * 0.68, 24, 10);
+          this.tweens.add({ targets: sg, scaleX: 1.12, scaleY: 1.12, duration: 600 + i * 200, yoyo: true, repeat: -1 });
+        }
+      }
     } else {
-      this.add.text(W/2, H*0.50, '全員やられた…\nもう一度挑戦しろ！', {
-        fontSize: '22px', color:'#ffaaaa', align:'center', lineSpacing:8
+      this.add.text(W / 2, H * 0.52, '全員が倒れた', {
+        fontSize: '22px', fontFamily: FB, color: '#CC8888'
+      }).setOrigin(0.5);
+      this.add.text(W / 2, H * 0.60, 'もう一度挑め', {
+        fontSize: '16px', fontFamily: FB, color: '#884444'
       }).setOrigin(0.5);
     }
 
-    const btnColor = this.won ? 0x22aa55 : 0xcc2233;
-    const btn = this.add.rectangle(W/2, H*0.70, 270, 72, btnColor).setInteractive();
-    const btnGlow = this.add.rectangle(W/2, H*0.70, 280, 82, btnColor, 0.25).setBlendMode(Phaser.BlendModes.ADD);
-    this.add.text(W/2, H*0.70, 'もう一度', {
-      fontSize: '28px', fontFamily:'Arial Black', color:'#ffffff'
+    // Retry button
+    const btnY   = H * 0.80;
+    const btnCol = this.won ? C.TEAL : C.PINK;
+    const btnBg  = this.add.graphics();
+    const btnHit = this.add.rectangle(W / 2, btnY, 250, 64, 0x000000, 0).setInteractive();
+    const drawBtn = (hover) => {
+      btnBg.clear();
+      btnBg.fillStyle(hover ? btnCol : 0x000000, hover ? 0.18 : 0.10);
+      btnBg.fillRoundedRect(W / 2 - 125, btnY - 32, 250, 64, 9);
+      btnBg.lineStyle(2, btnCol, hover ? 1 : 0.72);
+      btnBg.strokeRoundedRect(W / 2 - 125, btnY - 32, 250, 64, 9);
+    };
+    drawBtn(false);
+    this.add.text(W / 2, btnY - 9, 'RETRY', {
+      fontSize: '20px', fontFamily: FH, color: '#FFFFFF', letterSpacing: 5
+    }).setOrigin(0.5);
+    this.add.text(W / 2, btnY + 13, 'もう一度', {
+      fontSize: '13px', fontFamily: FB, color: toHex(C.GRAY)
     }).setOrigin(0.5);
 
-    this.tweens.add({ targets:[btn,btnGlow], scaleX:1.04, scaleY:1.04, duration:700, yoyo:true, repeat:-1 });
-    btn.on('pointerdown', () => {
-      this.cameras.main.fadeOut(300,0,0,0);
+    this.tweens.add({ targets: btnHit, scaleX: 1.03, scaleY: 1.03, duration: 950, yoyo: true, repeat: -1 });
+    btnHit.on('pointerover',  () => drawBtn(true));
+    btnHit.on('pointerout',   () => drawBtn(false));
+    btnHit.on('pointerdown',  () => {
+      SFX.tap();
+      this.cameras.main.fadeOut(300, 0, 0, 0);
       this.time.delayedCall(320, () => this.scene.start('Title'));
     });
-    btn.on('pointerover', () => btn.setFillStyle(this.won ? 0x33dd77 : 0xff3344));
-    btn.on('pointerout',  () => btn.setFillStyle(btnColor));
   }
 
-  fireworks() {
-    const colors = [0xff4444, 0xffdd44, 0x44ff88, 0x44aaff, 0xff88ff, 0xffffff];
+  _drawStar(gfx, cx, cy, r1, r2) {
+    const pts = 5;
+    gfx.beginPath();
+    for (let i = 0; i < pts * 2; i++) {
+      const r = i % 2 === 0 ? r1 : r2;
+      const a = (i * Math.PI / pts) - Math.PI / 2;
+      i === 0 ? gfx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+              : gfx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    gfx.closePath();
+    gfx.fillPath();
+  }
+
+  _fireworks() {
+    const colors = [C.PINK, C.GOLD, C.TEAL, C.CYAN, C.PURPLE, C.WHITE];
     const burst = () => {
-      const x = rand(60, W-60), y = rand(H*0.1, H*0.55);
+      const x = rand(60, W - 60), y = rand(H * 0.08, H * 0.52);
       const color = choose(colors);
-      for (let i = 0; i < 24; i++) {
-        const angle = (i/24)*Math.PI*2;
-        const spd = 60 + rand(0,80);
-        const p = this.add.circle(x, y, 4, color).setBlendMode(Phaser.BlendModes.ADD);
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2;
+        const spd = 50 + rand(0, 90);
+        const p = this.add.circle(x, y, 3 + rand(0, 3), color).setBlendMode(Phaser.BlendModes.ADD);
         this.tweens.add({
-          targets: p, x: x+Math.cos(angle)*spd, y: y+Math.sin(angle)*spd,
-          alpha: 0, duration: 600+rand(0,400), onComplete: ()=>p.destroy()
+          targets: p, x: x + Math.cos(a) * spd, y: y + Math.sin(a) * spd,
+          alpha: 0, duration: 580 + rand(0, 500), onComplete: () => p.destroy()
         });
       }
+      const rg = this.add.graphics();
+      rg.lineStyle(2, color, 0.75);
+      rg.strokeCircle(x, y, 5);
+      this.tweens.add({ targets: rg, scaleX: 4, scaleY: 4, alpha: 0, duration: 280, onComplete: () => rg.destroy() });
     };
-    this.time.addEvent({ delay: 280, callback: burst, repeat: 30 });
+    this.time.addEvent({ delay: 240, callback: burst, repeat: 38 });
   }
 
-  darkParticles() {
-    for (let i = 0; i < 20; i++) {
-      const x = rand(0,W);
-      const p = this.add.text(x, rand(0,H*0.8), '💀', { fontSize: rand(16,32)+'px' }).setAlpha(0.2);
-      this.tweens.add({ targets:p, y: p.y+40, alpha:0, duration:3000+rand(0,2000), delay:rand(0,2000), repeat:-1, onRepeat:()=>{ p.y=rand(0,H*0.5); p.x=rand(0,W); p.alpha=0.2; } });
+  _darkAmbience() {
+    for (let i = 0; i < 16; i++) {
+      const p = this.add.rectangle(rand(0, W), rand(0, H * 0.7), 2, 2, C.PINK, 0.07);
+      this.tweens.add({
+        targets: p, y: p.y + 55, alpha: 0, duration: 3500 + rand(0, 2500),
+        delay: rand(0, 2200), repeat: -1,
+        onRepeat: () => { p.y = rand(0, H * 0.4); p.x = rand(0, W); p.alpha = 0.07; }
+      });
     }
   }
 }
 
-// ===== Phaser設定 =====
+// ===== PHASER CONFIG =====
 new Phaser.Game({
   type: Phaser.AUTO,
   width: W, height: H,
-  backgroundColor: '#060612',
+  backgroundColor: '#070A18',
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [TitleScene, GameScene, BattleScene, ResultScene],
+  scene: [PreloadScene, TitleScene, GameScene, BattleScene, ResultScene],
 });
