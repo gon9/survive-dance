@@ -715,17 +715,30 @@ class GameScene extends Phaser.Scene {
       e.img.y += e.speed;
 
       // bullet hit enemy
-      let killed = false;
+      let hitX = 0, hitY = 0, killed = false;
       for (let j = this.bullets.length - 1; j >= 0; j--) {
         const b = this.bullets[j];
-        if (Math.abs(b.circle.x - e.img.x) < 24 && Math.abs(b.circle.y - e.img.y) < 30) {
+        if (Math.abs(b.circle.x - e.img.x) < 22 && Math.abs(b.circle.y - e.img.y) < 28) {
+          hitX = e.img.x; hitY = e.img.y;
           b.circle.destroy(); b.trail.destroy(); this.bullets.splice(j, 1);
           killed = true; break;
         }
       }
       if (killed) {
-        this._enemyKillFX(e.img.x, e.img.y);
+        this._enemyKillFX(hitX, hitY);
         e.img.destroy(); this.enemies.splice(i, 1);
+        // ── AoE chain: wipe nearby enemies in radius ──
+        const aoeR = 28 + this.weaponLevel * 4;
+        let chainCount = 0;
+        for (let k = this.enemies.length - 1; k >= 0; k--) {
+          const ne = this.enemies[k];
+          if (Math.abs(ne.img.x - hitX) < aoeR && Math.abs(ne.img.y - hitY) < aoeR) {
+            this._enemyKillFX(ne.img.x, ne.img.y);
+            ne.img.destroy(); this.enemies.splice(k, 1);
+            chainCount++;
+          }
+        }
+        if (chainCount >= 3) this._sweepFX(hitX, hitY, chainCount);
         continue;
       }
 
@@ -933,7 +946,7 @@ class GameScene extends Phaser.Scene {
 
   // ===== SHOOT SYSTEM =====
   _startShootTimer() {
-    const delay = Math.max(150, 400 - this.weaponLevel * 30);
+    const delay = Math.max(120, 380 - this.weaponLevel * 28);
     this.shootTimer = this.time.addEvent({
       delay, callback: () => this._autoShoot(), loop: true
     });
@@ -942,11 +955,12 @@ class GameScene extends Phaser.Scene {
   _autoShoot() {
     if (this.phase !== 'run' || this.soldierImages.length === 0) return;
     SFX.shoot();
-    const shots = Math.min(this.soldierImages.length, 1 + Math.floor(this.weaponLevel / 3));
+    // Shots scale with army size: 1 shot per 4 soldiers, min 1, max 12
+    const shots = Math.min(this.soldierImages.length, Math.max(1, Math.floor(this.soldierCount / 4)));
     for (let i = 0; i < shots; i++) {
-      const si = this.soldierImages[i];
+      const si = this.soldierImages[i % this.soldierImages.length];
       this._spawnBullet(
-        this.playerGroup.x + si.img.x + rand(-4, 4),
+        this.playerGroup.x + si.img.x + rand(-5, 5),
         PLAYER_Y + si.img.y - 20
       );
     }
@@ -969,29 +983,66 @@ class GameScene extends Phaser.Scene {
 
   // ===== ENEMY SYSTEM =====
   _startEnemySpawner() {
+    this.waveCount = 0;
     this.enemySpawnTimer = this.time.addEvent({
-      delay: 1600, callback: () => this._spawnEnemyWave(), loop: true
+      delay: 2400, callback: () => this._spawnEnemyWave(), loop: true
     });
   }
 
   _spawnEnemyWave() {
     if (this.phase !== 'run') return;
-    const base  = 1 + Math.floor(this.gatesPassed / 2);
-    const count = Math.min(base + rand(0, 1), 5);
-    for (let k = 0; k < count; k++) {
-      const x = ROAD_X + rand(-(ROAD_W / 2 - 24), ROAD_W / 2 - 24);
-      const img = this.add.image(x, -50, 'zombie').setScale(0.38).setDepth(5);
-      this.tweens.add({ targets: img, scaleX: -0.38, duration: 260, yoyo: true, repeat: -1 });
-      this.enemies.push({ img, speed: 1.2 + Math.random() * 1.2 });
+    this.waveCount++;
+
+    // Dense grid formation: cols × rows
+    const cols     = Math.min(5 + Math.floor(this.gatesPassed / 2), 9);
+    const rows     = Math.min(2 + Math.floor(this.gatesPassed / 3), 5);
+    const roadHalf = ROAD_W / 2 - 12;
+    const gapX     = (roadHalf * 2) / Math.max(cols - 1, 1);
+    const gapY     = 34;
+    const scale    = 0.24;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = ROAD_X - roadHalf + c * gapX;
+        const y = -16 - r * gapY;
+        const img = this.add.image(x, y, 'zombie').setScale(scale).setDepth(5);
+        // subtle sway instead of full flip (keeps dense look)
+        this.tweens.add({ targets: img, angle: rand(-8, 8), duration: 260 + rand(0, 80), yoyo: true, repeat: -1 });
+        this.enemies.push({ img, speed: 0.85 + Math.random() * 0.45 });
+      }
     }
+
+    // Wave banner
+    const wTxt = this.add.text(W / 2, H * 0.44, `WAVE  ${this.waveCount}`, {
+      fontSize: '20px', fontFamily: FH, color: toHex(C.PINK), stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setDepth(50).setAlpha(0);
+    this.tweens.add({
+      targets: wTxt, alpha: 1, y: H * 0.40, duration: 250, ease: 'Back.easeOut',
+      onComplete: () => this.tweens.add({ targets: wTxt, alpha: 0, delay: 500, duration: 300, onComplete: () => wTxt.destroy() })
+    });
   }
 
   _enemyKillFX(x, y) {
-    for (let i = 0; i < 10; i++) {
+    // Small debris (fast, low cost)
+    for (let i = 0; i < 5; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const spd = 20 + Math.random() * 40;
-      const p = this.add.circle(x, y, 2 + Math.random() * 3, C.TEAL).setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({ targets: p, x: x + Math.cos(ang) * spd, y: y + Math.sin(ang) * spd, alpha: 0, scale: 0.1, duration: 280 + rand(0, 150), onComplete: () => p.destroy() });
+      const p = this.add.rectangle(x + rand(-4,4), y + rand(-4,4), rand(3,6), rand(3,6), choose([0x44FF88, 0x22DD66, 0x88FFAA])).setDepth(12);
+      this.tweens.add({ targets: p, x: p.x + Math.cos(ang)*rand(15,35), y: p.y + Math.sin(ang)*rand(15,35), alpha: 0, duration: 220 + rand(0,100), onComplete: () => p.destroy() });
+    }
+  }
+
+  _sweepFX(x, y, count) {
+    // Big shockwave ring when many enemies die at once
+    const ring = this.add.graphics().setDepth(13);
+    ring.lineStyle(3, C.TEAL, 0.9);
+    ring.strokeCircle(x, y, 10);
+    this.tweens.add({ targets: ring, scaleX: 5, scaleY: 5, alpha: 0, duration: 350, onComplete: () => ring.destroy() });
+
+    if (count >= 5) {
+      const txt = this.add.text(x, y - 10, `×${count + 1} SWEEP!`, {
+        fontSize: '18px', fontFamily: FH, color: toHex(C.GOLD), stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(50);
+      this.tweens.add({ targets: txt, y: y - 60, alpha: 0, duration: 700, ease: 'Power2', onComplete: () => txt.destroy() });
     }
   }
 
