@@ -312,27 +312,36 @@ function makeGateData() {
   });
 }
 
-// ===== PRELOAD SCENE =====
-class PreloadScene extends Phaser.Scene {
-  constructor() { super('Preload'); }
-
-  preload() {
-    // Show loading bar
-    const bar = this.add.rectangle(W / 2, H / 2, 0, 6, C.CYAN).setOrigin(0, 0.5);
-    bar.x = W / 2 - 160;
-    this.add.rectangle(W / 2, H / 2, 320, 10, C.DIM).setOrigin(0.5);
-    this.add.text(W / 2, H / 2 - 24, 'LOADING', {
-      fontSize: '12px', fontFamily: FH, color: toHex(C.GRAY), letterSpacing: 4
-    }).setOrigin(0.5);
-
-    this.load.on('progress', v => { bar.width = 320 * v; });
-    this.load.image('soldier', soldierSVG());
-    this.load.image('zombie',  zombieSVG());
-  }
+// ===== BOOT SCENE =====
+class BootScene extends Phaser.Scene {
+  constructor() { super('Boot'); }
 
   create() {
     buildTextures(this);
-    this.scene.start('Title');
+
+    let pending = 2;
+    const advance = () => {
+      if (--pending === 0) {
+        const el = document.getElementById('loading');
+        if (el) el.style.display = 'none';
+        this.scene.start('Title');
+      }
+    };
+
+    const loadSVG = (key, uri) => {
+      const img = new Image();
+      const t = this.time.delayedCall(4000, advance);
+      img.onload = () => {
+        t.remove(false);
+        if (!this.textures.exists(key)) this.textures.addImage(key, img);
+        advance();
+      };
+      img.onerror = () => { t.remove(false); advance(); };
+      img.src = uri;
+    };
+
+    loadSVG('soldier', soldierSVG());
+    loadSVG('zombie',  zombieSVG());
   }
 }
 
@@ -1031,5 +1040,5 @@ new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [PreloadScene, TitleScene, GameScene, BattleScene, ResultScene],
+  scene: [BootScene, TitleScene, GameScene, BattleScene, ResultScene],
 });

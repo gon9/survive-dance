@@ -2,7 +2,7 @@
   "name": "Survive Dance",
   "short_name": "SurviveDance",
   "description": "横スライドでゾンビを倒せ！",
-  "start_url": "/",
+  "start_url": "./",
   "display": "fullscreen",
   "orientation": "portrait",
   "background_color": "#1a1a2e",

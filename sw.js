@@ -1,8 +1,23 @@
-const CACHE = 'survive-dance-v1';
-const FILES = ['/', '/index.html', '/game.js', '/manifest.json'];
+const CACHE = 'survive-dance-v2';
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
+  const base = self.registration.scope;
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll([
+      base,
+      base + 'index.html',
+      base + 'game.js',
+      base + 'manifest.json',
+    ])).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', e => {
