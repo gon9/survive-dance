@@ -504,6 +504,7 @@ class GameScene extends Phaser.Scene {
     this.lastPointerX = W / 2;
     this.dragging     = false;
     this.bullets      = [];
+    this.enemies      = [];
 
     this._createBackground();
     this._createRoad();
@@ -513,6 +514,7 @@ class GameScene extends Phaser.Scene {
     this._createHUD();
     this._setupInput();
     this._startShootTimer();
+    this._startEnemySpawner();
     this.cameras.main.fadeIn(350);
   }
 
@@ -699,28 +701,68 @@ class GameScene extends Phaser.Scene {
       s.img.y = s.baseY + Math.sin(time * 0.006 + s.phase) * 2.5;
     }
 
-    // Move bullets upward, destroy when off-screen
+    // ── Bullets move upward ──
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
       b.circle.y -= b.speed;
-      b.trail.y  = b.circle.y + 8;
-      if (b.circle.y < -20) {
-        b.circle.destroy();
-        b.trail.destroy();
-        this.bullets.splice(i, 1);
+      b.trail.y   = b.circle.y + 8;
+      if (b.circle.y < -20) { b.circle.destroy(); b.trail.destroy(); this.bullets.splice(i, 1); }
+    }
+
+    // ── Enemies walk down; bullet collision; reach-player damage ──
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      e.img.y += e.speed;
+
+      // bullet hit enemy
+      let killed = false;
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        const b = this.bullets[j];
+        if (Math.abs(b.circle.x - e.img.x) < 24 && Math.abs(b.circle.y - e.img.y) < 30) {
+          b.circle.destroy(); b.trail.destroy(); this.bullets.splice(j, 1);
+          killed = true; break;
+        }
+      }
+      if (killed) {
+        this._enemyKillFX(e.img.x, e.img.y);
+        e.img.destroy(); this.enemies.splice(i, 1);
+        continue;
+      }
+
+      // enemy reaches player → lose 1 soldier
+      if (e.img.y > PLAYER_Y + 15) {
+        e.img.destroy(); this.enemies.splice(i, 1);
+        this.soldierCount = Math.max(1, this.soldierCount - 1);
+        this._rebuildSoldiers(); this._updateHUD();
+        this.cameras.main.shake(120, 0.014);
       }
     }
 
-    // Scroll walls and check collision
+    // ── Walls scroll down; bullet shatters wall; contact = fallback ──
     for (const wall of this.wallObjs) {
+      if (wall.passed) continue;
       const sy = wall.worldY + this.scrollY;
       wall.container.y = sy;
-      if (!wall.passed && Math.abs(sy - PLAYER_Y) < 24) {
-        wall.passed = true;
-        this._applyWallRankUp(wall);
+
+      // bullet hits wall
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        const b = this.bullets[j];
+        if (Math.abs(b.circle.y - sy) < 20 && Math.abs(b.circle.x - ROAD_X) < ROAD_W / 2 - 4) {
+          b.circle.destroy(); b.trail.destroy(); this.bullets.splice(j, 1);
+          wall.hp--;
+          this._wallHitFX(b.circle.x, sy);
+          if (wall.hp <= 0) { wall.passed = true; this._applyWallRankUp(wall); }
+          break;
+        }
+      }
+
+      // fallback: player body contact still triggers bonus
+      if (!wall.passed && sy > PLAYER_Y - 10 && sy < PLAYER_Y + 30) {
+        wall.passed = true; this._applyWallRankUp(wall);
       }
     }
 
+    // ── Gates scroll down; player steers into one ──
     for (const go of this.gateObjs) {
       const sy  = go.worldY + this.scrollY;
       const vis = sy > -100 && sy < H + 100;
@@ -731,18 +773,17 @@ class GameScene extends Phaser.Scene {
         side.sub.setVisible(vis).setY(sy + 21);
       }
       if (!go.passed && Math.abs(sy - PLAYER_Y) < 34) {
-        go.passed = true;
-        this.gatesPassed++;
+        go.passed = true; this.gatesPassed++;
         const chosen = Math.abs(this.playerX - go.left.x) <= Math.abs(this.playerX - go.right.x)
           ? go.left : go.right;
-        this._applyGate(chosen.data);
-        this._gatePassFX(chosen, sy);
-        this._updateHUD();
+        this._applyGate(chosen.data); this._gatePassFX(chosen, sy); this._updateHUD();
       }
     }
 
     if (this.gatesPassed >= NUM_GATES && !this.battleStarted) {
       this.battleStarted = true;
+      this.phase = 'done';
+      this._cleanupBullets(); this._cleanupEnemies();
       this.time.delayedCall(600, () => {
         this.cameras.main.fadeOut(400, 0, 0, 0);
         this.time.delayedCall(420, () =>
@@ -837,7 +878,7 @@ class GameScene extends Phaser.Scene {
     container.add(label);
     this.tweens.add({ targets: label, y: label.y - 4, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    return { container, worldY, passed: false };
+    return { container, worldY, passed: false, hp: 5 };
   }
 
   _applyWallRankUp(wall) {
@@ -924,6 +965,51 @@ class GameScene extends Phaser.Scene {
   _cleanupBullets() {
     for (const b of this.bullets) { b.circle.destroy(); b.trail.destroy(); }
     this.bullets = [];
+  }
+
+  // ===== ENEMY SYSTEM =====
+  _startEnemySpawner() {
+    this.enemySpawnTimer = this.time.addEvent({
+      delay: 1600, callback: this._spawnEnemyWave, callbackScope: this, loop: true
+    });
+  }
+
+  _spawnEnemyWave() {
+    if (this.phase !== 'run') return;
+    const base  = 1 + Math.floor(this.gatesPassed / 2);
+    const count = Math.min(base + rand(0, 1), 5);
+    for (let k = 0; k < count; k++) {
+      const x = ROAD_X + rand(-(ROAD_W / 2 - 24), ROAD_W / 2 - 24);
+      const img = this.add.image(x, -50, 'zombie').setScale(0.38).setDepth(5);
+      this.tweens.add({ targets: img, scaleX: -0.38, duration: 260, yoyo: true, repeat: -1 });
+      this.enemies.push({ img, speed: 1.2 + Math.random() * 1.2 });
+    }
+  }
+
+  _enemyKillFX(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 20 + Math.random() * 40;
+      const p = this.add.circle(x, y, 2 + Math.random() * 3, C.TEAL).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: p, x: x + Math.cos(ang) * spd, y: y + Math.sin(ang) * spd, alpha: 0, scale: 0.1, duration: 280 + rand(0, 150), onComplete: () => p.destroy() });
+    }
+  }
+
+  _wallHitFX(x, y) {
+    for (let i = 0; i < 7; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+      const spd = 25 + Math.random() * 35;
+      const p = this.add.rectangle(x + rand(-8, 8), y, rand(4, 9), rand(4, 8), choose([0x5A4A3A, 0xC8A870, 0x888888]));
+      this.tweens.add({ targets: p, x: p.x + Math.cos(ang) * spd, y: p.y + Math.sin(ang) * spd - 10, angle: rand(-120, 120), alpha: 0, duration: 280 + rand(0, 140), onComplete: () => p.destroy() });
+    }
+    const spark = this.add.circle(x, y, 8, C.GOLD, 0.8).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: spark, alpha: 0, scale: 2, duration: 150, onComplete: () => spark.destroy() });
+  }
+
+  _cleanupEnemies() {
+    for (const e of this.enemies) e.img.destroy();
+    this.enemies = [];
+    if (this.enemySpawnTimer) this.enemySpawnTimer.remove();
   }
 }
 
