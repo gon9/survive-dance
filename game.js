@@ -804,8 +804,8 @@ class GameScene extends Phaser.Scene {
       SFX.gateMul();
       this.tweens.add({ targets: this.playerGroup, scaleX: 1.35, scaleY: 1.35, duration: 120, yoyo: true, ease: 'Back.easeOut' });
     } else SFX.gateWpn();
-    if (data.type === 'wpn') {
-      if (this.shootTimer) { this.shootTimer.remove(); this._startShootTimer(); }
+    if (data.type === 'wpn' && this.shootTimer) {
+      this.shootTimer.remove(false); this._startShootTimer();
     }
   }
 
@@ -935,7 +935,7 @@ class GameScene extends Phaser.Scene {
   _startShootTimer() {
     const delay = Math.max(150, 400 - this.weaponLevel * 30);
     this.shootTimer = this.time.addEvent({
-      delay, callback: this._autoShoot, callbackScope: this, loop: true
+      delay, callback: () => this._autoShoot(), loop: true
     });
   }
 
@@ -946,20 +946,20 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < shots; i++) {
       const si = this.soldierImages[i];
       this._spawnBullet(
-        this.playerGroup.x + si.img.x + rand(-3, 3),
-        this.playerGroup.y + si.img.y - 22
+        this.playerGroup.x + si.img.x + rand(-4, 4),
+        PLAYER_Y + si.img.y - 20
       );
     }
   }
 
   _spawnBullet(x, y) {
-    const rank = RANKS[this.soldierRank];
-    const bulletColors = [C.CYAN, C.TEAL, C.GOLD, C.PURPLE];
-    const sizes = [3, 4, 5, 6];
-    const color = bulletColors[rank.id - 1];
-    const circle = this.add.circle(x, y, sizes[rank.id - 1], color).setBlendMode(Phaser.BlendModes.ADD);
-    const trail  = this.add.ellipse(x, y + 8, sizes[rank.id - 1] * 0.8, sizes[rank.id - 1] * 2.5, color, 0.35).setBlendMode(Phaser.BlendModes.ADD);
-    this.bullets.push({ circle, trail, speed: 9 + (rank.id - 1) * 1.5 });
+    const rank  = RANKS[this.soldierRank];
+    const colors = [C.CYAN, C.TEAL, C.GOLD, C.PURPLE];
+    const col    = colors[rank.id - 1];
+    // Solid rectangle bullet (no blend mode — reliable on all renderers)
+    const circle = this.add.rectangle(x, y, 5, 16, col).setDepth(15);
+    const trail  = this.add.rectangle(x, y + 14, 3, 8, col, 0.5).setDepth(15);
+    this.bullets.push({ circle, trail, speed: 10 + (rank.id - 1) * 2 });
   }
 
   _cleanupBullets() {
@@ -970,7 +970,7 @@ class GameScene extends Phaser.Scene {
   // ===== ENEMY SYSTEM =====
   _startEnemySpawner() {
     this.enemySpawnTimer = this.time.addEvent({
-      delay: 1600, callback: this._spawnEnemyWave, callbackScope: this, loop: true
+      delay: 1600, callback: () => this._spawnEnemyWave(), loop: true
     });
   }
 
