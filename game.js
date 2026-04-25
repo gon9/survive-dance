@@ -26,6 +26,15 @@ const C = {
 const FH = 'Orbitron, "Arial Black", sans-serif';
 const FB = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif';
 
+// ===== RANK SYSTEM =====
+const RANKS = [
+  { id:1, key:'soldier-1', name:'一等兵', power:1.0, bodyColor:'#1A2C6E', helmetColor:'#1C2848', badge:null },
+  { id:2, key:'soldier-2', name:'軍曹',   power:1.5, bodyColor:'#1A4A2A', helmetColor:'#183820', badge:'#FFD700' },
+  { id:3, key:'soldier-3', name:'大尉',   power:2.2, bodyColor:'#4A2A1A', helmetColor:'#3C1810', badge:'#FF6B35' },
+  { id:4, key:'soldier-4', name:'大佐',   power:3.0, bodyColor:'#2A0A4A', helmetColor:'#20083A', badge:'#AA00FF' },
+];
+const NUM_WALLS = NUM_GATES - 2;
+
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function rand(lo, hi)     { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
 function choose(arr)      { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -74,6 +83,12 @@ const SFX = {
       setTimeout(() => this._tone(f, 'sawtooth', 0.18, 0.45, f * 0.88), i * 160)
     );
   },
+  rankUp() {
+    [220, 440, 660, 880].forEach((f, i) =>
+      setTimeout(() => this._tone(f, 'sine', 0.20, 0.18, f * 1.5), i * 80)
+    );
+  },
+  shoot() { this._tone(800, 'square', 0.06, 0.04, 400); },
 };
 
 // ===== SVG SPRITES =====
@@ -81,38 +96,47 @@ function svgURI(str) {
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(str)));
 }
 
-function soldierSVG() {
+function soldierRankedSVG(rank) {
+  let badge = '';
+  if (rank.id === 2) {
+    badge = `<rect x="10" y="21" width="9" height="3" rx="1" fill="${rank.badge}" opacity="0.92"/>`;
+  } else if (rank.id === 3) {
+    badge = `<rect x="10" y="19" width="9" height="2.5" rx="1" fill="${rank.badge}" opacity="0.92"/>
+  <rect x="10" y="23" width="9" height="2.5" rx="1" fill="${rank.badge}" opacity="0.92"/>`;
+  } else if (rank.id === 4) {
+    badge = `<polygon points="22,1 23.2,4.2 26.8,4.2 24,6.5 25.1,9.8 22,7.6 18.9,9.8 20,6.5 17.2,4.2 20.8,4.2" fill="${rank.badge}" opacity="0.95"/>`;
+  }
   return svgURI(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 70" width="112" height="140">
   <ellipse cx="22" cy="67" rx="14" ry="4" fill="rgba(0,0,0,0.45)"/>
   <rect x="11" y="50" width="10" height="9" rx="3" fill="#080912"/>
   <rect x="23" y="50" width="10" height="9" rx="3" fill="#080912"/>
   <rect x="12" y="51" width="8" height="2" rx="1" fill="rgba(70,90,180,0.35)"/>
   <rect x="24" y="51" width="8" height="2" rx="1" fill="rgba(70,90,180,0.35)"/>
-  <rect x="12" y="35" width="9" height="17" rx="2" fill="#162868"/>
-  <rect x="23" y="35" width="9" height="17" rx="2" fill="#162868"/>
+  <rect x="12" y="35" width="9" height="17" rx="2" fill="${rank.bodyColor}"/>
+  <rect x="23" y="35" width="9" height="17" rx="2" fill="${rank.bodyColor}"/>
   <rect x="13" y="43" width="7" height="4" rx="2" fill="#0C1838"/>
   <rect x="24" y="43" width="7" height="4" rx="2" fill="#0C1838"/>
-  <rect x="9" y="17" width="26" height="20" rx="4" fill="#1A2C6E"/>
+  <rect x="9" y="17" width="26" height="20" rx="4" fill="${rank.bodyColor}"/>
   <rect x="11" y="18" width="22" height="8" rx="3" fill="rgba(90,130,255,0.15)"/>
-  <rect x="13" y="19" width="18" height="12" rx="2" fill="#111E52"/>
+  <rect x="13" y="19" width="18" height="12" rx="2" fill="rgba(0,0,0,0.22)"/>
   <rect x="15" y="20" width="14" height="5" rx="1.5" fill="rgba(61,216,255,0.10)"/>
   <rect x="9"  y="35" width="26" height="4" rx="1" fill="#6A5218"/>
   <rect x="19" y="35" width="6"  height="4" fill="#B08828"/>
-  <rect x="2"  y="18" width="8"  height="15" rx="4" fill="#1A2C6E"/>
+  <rect x="2"  y="18" width="8"  height="15" rx="4" fill="${rank.bodyColor}"/>
   <rect x="3"  y="18" width="6"  height="5"  rx="3" fill="rgba(80,120,220,0.18)"/>
-  <rect x="35" y="18" width="8"  height="15" rx="4" fill="#1A2C6E"/>
+  <rect x="35" y="18" width="8"  height="15" rx="4" fill="${rank.bodyColor}"/>
   <rect x="41" y="20" width="14" height="4"  rx="1" fill="#181820"/>
   <rect x="42" y="21" width="14" height="2"  rx="1" fill="rgba(50,60,100,0.5)"/>
   <rect x="36" y="19" width="9"  height="8"  rx="2" fill="#1E1E32"/>
   <rect x="38" y="26" width="5"  height="7"  rx="2" fill="#141425"/>
   <rect x="18" y="12" width="8"  height="7"  rx="1" fill="#C88060"/>
-  <ellipse cx="22" cy="8"  rx="11" ry="12" fill="#1C2848"/>
-  <ellipse cx="22" cy="6"  rx="9"  ry="9"  fill="#202E58"/>
-  <rect x="11" y="9"  width="22" height="5"  rx="0" fill="#181E40"/>
-  <rect x="13" y="7"  width="18" height="8"  rx="3" fill="#080E22"/>
+  <ellipse cx="22" cy="8"  rx="11" ry="12" fill="${rank.helmetColor}"/>
+  <ellipse cx="22" cy="6"  rx="9"  ry="9"  fill="${rank.helmetColor}"/>
+  <rect x="11" y="9"  width="22" height="5"  rx="0" fill="rgba(0,0,0,0.28)"/>
+  <rect x="13" y="7"  width="18" height="8"  rx="3" fill="${rank.helmetColor}"/>
   <rect x="14" y="9"  width="16" height="2.5" rx="1.2" fill="#3DD8FF" opacity="0.92"/>
   <rect x="14" y="8"  width="8"  height="1"  rx="0.5" fill="rgba(200,240,255,0.45)"/>
-  <rect x="20" y="1"  width="4"  height="7"  rx="1" fill="rgba(61,216,255,0.20)"/>
+  ${badge}
 </svg>`);
 }
 
@@ -319,7 +343,7 @@ class BootScene extends Phaser.Scene {
   create() {
     buildTextures(this);
 
-    let pending = 2;
+    let pending = RANKS.length + 1;
     const advance = () => {
       if (--pending === 0) {
         const el = document.getElementById('loading');
@@ -340,8 +364,8 @@ class BootScene extends Phaser.Scene {
       img.src = uri;
     };
 
-    loadSVG('soldier', soldierSVG());
-    loadSVG('zombie',  zombieSVG());
+    for (const r of RANKS) loadSVG(r.key, soldierRankedSVG(r));
+    loadSVG('zombie', zombieSVG());
   }
 }
 
@@ -470,6 +494,7 @@ class GameScene extends Phaser.Scene {
     SFX.init();
     this.soldierCount = 5;
     this.weaponLevel  = 1;
+    this.soldierRank  = 0;
     this.scrollY      = 0;
     this.gateData     = makeGateData();
     this.gatesPassed  = 0;
@@ -478,13 +503,16 @@ class GameScene extends Phaser.Scene {
     this.targetX      = W / 2;
     this.lastPointerX = W / 2;
     this.dragging     = false;
+    this.bullets      = [];
 
     this._createBackground();
     this._createRoad();
     this._createGates();
+    this._createWalls();
     this._createPlayerGroup();
     this._createHUD();
     this._setupInput();
+    this._startShootTimer();
     this.cameras.main.fadeIn(350);
   }
 
@@ -569,7 +597,7 @@ class GameScene extends Phaser.Scene {
         ox = Math.sin(a) * arcR * 0.82;
         oy = row * 28;
       }
-      const img = this.make.image({ x: ox, y: oy, key: 'soldier', add: false });
+      const img = this.make.image({ x: ox, y: oy, key: RANKS[this.soldierRank].key, add: false });
       img.setScale(0.50);
       this.playerGroup.add(img);
       this.soldierImages.push({ img, baseY: oy, phase: i * 0.44 });
@@ -620,6 +648,13 @@ class GameScene extends Phaser.Scene {
       fontSize: '28px', fontFamily: FH, color: toHex(C.GOLD), stroke: '#000', strokeThickness: 2
     }).setOrigin(1, 0).setDepth(21);
 
+    this.add.text(W / 2, 13, 'RANK', {
+      fontSize: '9px', fontFamily: FH, color: toHex(C.PURPLE), letterSpacing: 2
+    }).setOrigin(0.5).setDepth(21);
+    this.hudRank = this.add.text(W / 2, 26, '一等兵', {
+      fontSize: '16px', fontFamily: FB, color: toHex(C.PURPLE), stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(21);
+
     this.add.rectangle(W / 2, 58, W - 100, 6, C.DIM).setDepth(21);
     this.progFill = this.add.rectangle(52, 55, 0, 4, C.CYAN).setOrigin(0, 0).setDepth(22);
     this.add.text(W / 2, 58, 'MISSION', {
@@ -632,6 +667,7 @@ class GameScene extends Phaser.Scene {
   _updateHUD() {
     this.hudSoldier.setText(this.soldierCount.toString());
     this.hudWeapon.setText('LV.' + this.weaponLevel);
+    this.hudRank.setText(RANKS[this.soldierRank].name);
     const maxW = W - 106;
     const prog = this.gatesPassed / NUM_GATES;
     this.tweens.add({ targets: this.progFill, width: prog * maxW, duration: 300, ease: 'Power2' });
@@ -663,6 +699,28 @@ class GameScene extends Phaser.Scene {
       s.img.y = s.baseY + Math.sin(time * 0.006 + s.phase) * 2.5;
     }
 
+    // Move bullets upward, destroy when off-screen
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      b.circle.y -= b.speed;
+      b.trail.y  = b.circle.y + 8;
+      if (b.circle.y < -20) {
+        b.circle.destroy();
+        b.trail.destroy();
+        this.bullets.splice(i, 1);
+      }
+    }
+
+    // Scroll walls and check collision
+    for (const wall of this.wallObjs) {
+      const sy = wall.worldY + this.scrollY;
+      wall.container.y = sy;
+      if (!wall.passed && Math.abs(sy - PLAYER_Y) < 24) {
+        wall.passed = true;
+        this._applyWallRankUp(wall);
+      }
+    }
+
     for (const go of this.gateObjs) {
       const sy  = go.worldY + this.scrollY;
       const vis = sy > -100 && sy < H + 100;
@@ -688,7 +746,7 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(600, () => {
         this.cameras.main.fadeOut(400, 0, 0, 0);
         this.time.delayedCall(420, () =>
-          this.scene.start('Battle', { soldiers: this.soldierCount, weaponLevel: this.weaponLevel })
+          this.scene.start('Battle', { soldiers: this.soldierCount, weaponLevel: this.weaponLevel, soldierRank: this.soldierRank })
         );
       });
     }
@@ -701,8 +759,13 @@ class GameScene extends Phaser.Scene {
     this._rebuildSoldiers();
     if      (data.type === 'add' && data.value > 0) SFX.gateAdd();
     else if (data.type === 'add' && data.value < 0) SFX.gateSub();
-    else if (data.type === 'mul')                   SFX.gateMul();
-    else                                            SFX.gateWpn();
+    else if (data.type === 'mul') {
+      SFX.gateMul();
+      this.tweens.add({ targets: this.playerGroup, scaleX: 1.35, scaleY: 1.35, duration: 120, yoyo: true, ease: 'Back.easeOut' });
+    } else SFX.gateWpn();
+    if (data.type === 'wpn') {
+      if (this.shootTimer) { this.shootTimer.remove(); this._startShootTimer(); }
+    }
   }
 
   _gatePassFX(gate, sy) {
@@ -717,8 +780,8 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: pop, y: sy - 95, alpha: 0, duration: 900, ease: 'Power2', onComplete: () => pop.destroy() });
 
     const color = gateBgColor(gate.data);
-    for (let i = 0; i < 22; i++) {
-      const ang = (i / 22) * Math.PI * 2;
+    for (let i = 0; i < 36; i++) {
+      const ang = (i / 36) * Math.PI * 2;
       const spd = 65 + rand(0, 90);
       const p = this.add.circle(gate.img.x, sy, 4 + rand(0, 3), color).setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
@@ -735,15 +798,139 @@ class GameScene extends Phaser.Scene {
     ring.strokeCircle(gate.img.x, sy, 10);
     this.tweens.add({ targets: ring, scaleX: 5, scaleY: 5, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
 
-    const flash = this.add.rectangle(W / 2, H / 2, W, H, color, 0.14).setDepth(30);
+    const flash = this.add.rectangle(W / 2, H / 2, W, H, color, 0.24).setDepth(30);
     this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
+  }
+
+  // ===== WALL SYSTEM =====
+  _createWalls() {
+    this.wallObjs = [];
+    for (let j = 0; j < NUM_WALLS; j++) {
+      const worldY = H * 0.55 - (j + 1) * GATE_SPACING + GATE_SPACING * 0.5;
+      this.wallObjs.push(this._buildWall(worldY));
+    }
+  }
+
+  _buildWall(worldY) {
+    const ww = ROAD_W - 10;
+    const wh = 26;
+    const container = this.add.container(ROAD_X, worldY);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x3A3A3A, 1);
+    bg.fillRect(-ww / 2 - 2, -wh / 2 - 2, ww + 4, wh + 4);
+    bg.fillStyle(0x5A4A3A, 1);
+    bg.fillRect(-ww / 2, -wh / 2, ww, wh);
+    // brick pattern
+    for (let row = 0; row < 2; row++) {
+      const offset = row % 2 === 0 ? 0 : 22;
+      for (let bx = -ww / 2 + offset; bx < ww / 2; bx += 44) {
+        bg.lineStyle(1, 0x3A2A1A, 0.6);
+        bg.strokeRect(bx, -wh / 2 + row * (wh / 2), 40, wh / 2);
+      }
+    }
+    container.add(bg);
+
+    const label = this.add.text(0, -wh / 2 - 18, '▲ RANK UP!', {
+      fontSize: '13px', fontFamily: FH, color: toHex(C.CYAN), stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    container.add(label);
+    this.tweens.add({ targets: label, y: label.y - 4, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    return { container, worldY, passed: false };
+  }
+
+  _applyWallRankUp(wall) {
+    this.soldierRank = Math.min(this.soldierRank + 1, RANKS.length - 1);
+    this._rebuildSoldiers();
+    SFX.rankUp();
+    this._wallBreakFX(wall);
+    this._showRankUpBanner();
+    this._updateHUD();
+  }
+
+  _wallBreakFX(wall) {
+    wall.container.setVisible(false);
+    const cx = ROAD_X, cy = PLAYER_Y - 30;
+    for (let i = 0; i < 24; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 40 + Math.random() * 70;
+      const p = this.add.rectangle(
+        cx + rand(-50, 50), cy,
+        rand(4, 12), rand(4, 10),
+        choose([0x5A4A3A, 0x3A3A3A, 0x7A6A5A])
+      );
+      this.tweens.add({
+        targets: p,
+        x: p.x + Math.cos(ang) * spd,
+        y: p.y + Math.sin(ang) * spd - 20,
+        angle: rand(-180, 180),
+        alpha: 0, duration: 500 + rand(0, 300),
+        onComplete: () => p.destroy()
+      });
+    }
+    const flash = this.add.rectangle(W / 2, H / 2, W, H, C.GOLD, 0.20).setDepth(30);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
+  }
+
+  _showRankUpBanner() {
+    const rank = RANKS[this.soldierRank];
+    const colors = [toHex(C.CYAN), '#FFD700', '#FF6B35', '#AA00FF'];
+    const col = colors[this.soldierRank] || toHex(C.CYAN);
+    const txt = this.add.text(W / 2, H * 0.52, `▲ ${rank.name} 昇格！`, {
+      fontSize: '30px', fontFamily: FH, color: col,
+      stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5).setDepth(50).setAlpha(0).setScale(0.6);
+    this.tweens.add({
+      targets: txt, alpha: 1, scaleX: 1, scaleY: 1,
+      duration: 200, ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: txt, y: H * 0.38, alpha: 0, duration: 900, ease: 'Power2', onComplete: () => txt.destroy() });
+      }
+    });
+  }
+
+  // ===== SHOOT SYSTEM =====
+  _startShootTimer() {
+    const delay = Math.max(150, 400 - this.weaponLevel * 30);
+    this.shootTimer = this.time.addEvent({
+      delay, callback: this._autoShoot, callbackScope: this, loop: true
+    });
+  }
+
+  _autoShoot() {
+    if (this.phase !== 'run' || this.soldierImages.length === 0) return;
+    SFX.shoot();
+    const shots = Math.min(this.soldierImages.length, 1 + Math.floor(this.weaponLevel / 3));
+    for (let i = 0; i < shots; i++) {
+      const si = this.soldierImages[i];
+      this._spawnBullet(
+        this.playerGroup.x + si.img.x + rand(-3, 3),
+        this.playerGroup.y + si.img.y - 22
+      );
+    }
+  }
+
+  _spawnBullet(x, y) {
+    const rank = RANKS[this.soldierRank];
+    const bulletColors = [C.CYAN, C.TEAL, C.GOLD, C.PURPLE];
+    const sizes = [3, 4, 5, 6];
+    const color = bulletColors[rank.id - 1];
+    const circle = this.add.circle(x, y, sizes[rank.id - 1], color).setBlendMode(Phaser.BlendModes.ADD);
+    const trail  = this.add.ellipse(x, y + 8, sizes[rank.id - 1] * 0.8, sizes[rank.id - 1] * 2.5, color, 0.35).setBlendMode(Phaser.BlendModes.ADD);
+    this.bullets.push({ circle, trail, speed: 9 + (rank.id - 1) * 1.5 });
+  }
+
+  _cleanupBullets() {
+    for (const b of this.bullets) { b.circle.destroy(); b.trail.destroy(); }
+    this.bullets = [];
   }
 }
 
 // ===== BATTLE SCENE =====
 class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
-  init(data) { this.soldiers = data.soldiers; this.weaponLevel = data.weaponLevel; }
+  init(data) { this.soldiers = data.soldiers; this.weaponLevel = data.weaponLevel; this.soldierRank = data.soldierRank ?? 0; }
 
   create() {
     this.cameras.main.fadeIn(400);
@@ -806,7 +993,7 @@ class BattleScene extends Phaser.Scene {
       for (let c = 0; c < cols && placed < count; c++) {
         const x = ROAD_X + (c - (cols - 1) / 2) * 30;
         const y = H * 0.82 - r * 30;
-        this.soldierSprites.push({ img: this.add.image(x, y, 'soldier').setScale(0.50), alive: true });
+        this.soldierSprites.push({ img: this.add.image(x, y, RANKS[this.soldierRank].key).setScale(0.50), alive: true });
         placed++;
       }
     }
@@ -824,7 +1011,8 @@ class BattleScene extends Phaser.Scene {
   }
 
   _runBattle() {
-    let sHP = this.soldiers * (1 + this.weaponLevel * 0.6);
+    const rankPower = RANKS[this.soldierRank].power;
+    let sHP = this.soldiers * (1 + this.weaponLevel * 0.6) * rankPower;
     let zHP = this.initZombieCount * 3;
     const sMax = sHP, zMax = zHP;
 
