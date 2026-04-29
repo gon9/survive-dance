@@ -21,31 +21,50 @@ const FB = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif';
 
 // ===== GAME DATA =====
 const ENEMY_TYPES = {
-  normal: { hp:1,   speed:0.9,  scale:0.26, tint:0xFFFFFF },
-  runner: { hp:1,   speed:2.1,  scale:0.20, tint:0xFF8866 },
-  tank:   { hp:5,   speed:0.45, scale:0.42, tint:0xCC4444 },
-  boss:   { hp:200, speed:0.30, scale:1.30, tint:0xFF1111 },
+  normal: { hp:1,   speed:0.85, scale:0.22, tint:0xFFFFFF },
+  runner: { hp:1,   speed:2.2,  scale:0.17, tint:0xFF8866 },
+  tank:   { hp:6,   speed:0.40, scale:0.38, tint:0xCC4444 },
+  boss:   { hp:250, speed:0.28, scale:1.30, tint:0xFF1111 },
 };
+// Cols/rows grow mid-zone: waveNum tracked per zone
 const ZONES = [
-  { duration:14000, interval:1800, cols:[4,5], rows:[2,2], types:['normal']                  },
-  { duration:13000, interval:1500, cols:[5,7], rows:[2,3], types:['normal','runner']          },
-  { duration:11000, interval:1300, cols:[6,9], rows:[3,4], types:['normal','runner','tank']   },
+  { duration:16000, interval:1500, cols:[6,8],  rows:[2,3], types:['normal'],                 rowScale:0.20 },
+  { duration:14000, interval:1200, cols:[9,12], rows:[3,4], types:['normal','runner'],         rowScale:0.25 },
+  { duration:12000, interval:1000, cols:[12,16],rows:[4,6], types:['normal','runner','tank'],  rowScale:0.30 },
 ];
 const BOSS_ZONE = 3;
+
+// Gradual gate upgrades — small/medium/large per stat
 const GATE_CFG = {
+  // Soldiers
+  add5:   { type:'add',  value:5,   label:'+5',   sub:'増援',  tex:'gate-add', col:0x38FFAA },
   add10:  { type:'add',  value:10,  label:'+10',  sub:'増援',  tex:'gate-add', col:0x38FFAA },
   add20:  { type:'add',  value:20,  label:'+20',  sub:'増援',  tex:'gate-add', col:0x38FFAA },
+  add30:  { type:'add',  value:30,  label:'+30',  sub:'大増援', tex:'gate-add', col:0x38FFAA },
+  mul15:  { type:'mul',  value:1.5, label:'×1.5', sub:'増強',  tex:'gate-mul', col:0xFFAD1A },
   mul2:   { type:'mul',  value:2,   label:'×2',   sub:'倍増',  tex:'gate-mul', col:0xFFAD1A },
-  dmg:    { type:'wpn',  stat:'dmg',label:'攻撃',  sub:'+50%', tex:'gate-wpn', col:0x9A4EFF },
-  rate:   { type:'wpn',  stat:'rate',label:'連射', sub:'+30%', tex:'gate-wpn', col:0x9A4EFF },
-  pierce: { type:'wpn',  stat:'pierce',label:'貫通',sub:'ON',  tex:'gate-wpn', col:0x3DD8FF },
-  spread: { type:'wpn',  stat:'spread',label:'散弾',sub:'ON',  tex:'gate-wpn', col:0x3DD8FF },
-  heal:   { type:'heal', value:5,   label:'+5',   sub:'回復',  tex:'gate-add', col:0x38FFAA },
+  mul3:   { type:'mul',  value:3,   label:'×3',   sub:'大倍増', tex:'gate-mul', col:0xFFAD1A },
+  // Weapon — damage
+  dmgS:   { type:'wpn', stat:'dmgS', label:'攻撃', sub:'+20%', tex:'gate-wpn', col:0x9A4EFF },
+  dmgM:   { type:'wpn', stat:'dmgM', label:'攻撃', sub:'+40%', tex:'gate-wpn', col:0x9A4EFF },
+  dmgL:   { type:'wpn', stat:'dmgL', label:'攻撃', sub:'+60%', tex:'gate-wpn', col:0x9A4EFF },
+  // Weapon — fire rate
+  rateS:  { type:'wpn', stat:'rateS', label:'連射', sub:'+15%', tex:'gate-wpn', col:0x9A4EFF },
+  rateM:  { type:'wpn', stat:'rateM', label:'連射', sub:'+30%', tex:'gate-wpn', col:0x9A4EFF },
+  rateL:  { type:'wpn', stat:'rateL', label:'連射', sub:'+50%', tex:'gate-wpn', col:0x9A4EFF },
+  // Special
+  pierce: { type:'wpn', stat:'pierce', label:'貫通', sub:'ON',  tex:'gate-wpn', col:0x3DD8FF },
+  spread: { type:'wpn', stat:'spread', label:'散弾', sub:'ON',  tex:'gate-wpn', col:0x3DD8FF },
+  // Heal
+  heal3:  { type:'heal', value:3,   label:'+3',   sub:'回復',  tex:'gate-add', col:0x38FFAA },
+  heal8:  { type:'heal', value:8,   label:'+8',   sub:'回復',  tex:'gate-add', col:0x38FFAA },
+  heal15: { type:'heal', value:15,  label:'+15',  sub:'大回復', tex:'gate-add', col:0x38FFAA },
 };
+// Per-gate pool: small bonuses → medium → large/special
 const GATE_POOL = [
-  ['add10','add20','mul2','heal'],
-  ['add10','mul2','dmg','rate','heal'],
-  ['mul2','dmg','rate','pierce','spread'],
+  ['add5','add10','mul15','dmgS','rateS','heal3'],              // Z1 end — early
+  ['add10','add20','mul2','dmgM','rateM','heal8','pierce'],     // Z2 end — mid
+  ['add30','mul2','mul3','dmgL','rateL','pierce','spread','heal15'], // Z3 end — late
 ];
 const SKILL_CD = 8000;
 const SKILL_R  = 110;
@@ -283,7 +302,7 @@ class GameScene extends Phaser.Scene {
     this.bulletDmg   =1; this.fireDelay=350;
     this.pierce=false; this.spread=false;
     // State
-    this.phase='run'; this.zoneIdx=0; this.scrollY=0; this.eid=0;
+    this.phase='run'; this.zoneIdx=0; this.scrollY=0; this.eid=0; this.waveNum=0;
     // Pools
     this.bullets=[]; this.enemies=[]; this.bossBullets=[]; this.gatePairs=[];
     // Boss
@@ -456,6 +475,7 @@ class GameScene extends Phaser.Scene {
   // ===== ZONE SYSTEM =====
   _startZone(idx){
     this.zoneIdx=idx;
+    this.waveNum=0; // reset intra-zone wave counter
     if(this.spawnTimer){ this.spawnTimer.remove(); this.spawnTimer=null; }
     if(this.zoneTimer) { this.zoneTimer.remove();  this.zoneTimer=null; }
     this._showZoneBanner(idx);
@@ -473,15 +493,18 @@ class GameScene extends Phaser.Scene {
   _spawnWave(zoneIdx){
     if(this.phase!=='run')return;
     const z=ZONES[zoneIdx];
-    const cols=rand(z.cols[0],z.cols[1]);
-    const rows=rand(z.rows[0],z.rows[1]);
-    const spawnY=VANISH_Y+12;
+    this.waveNum++;
+    // Intra-zone scaling: every 3 waves, cols/rows grow slightly
+    const rowBonus=Math.floor(this.waveNum/3)*z.rowScale;
+    const cols=Math.round(clamp(rand(z.cols[0],z.cols[1])*(1+rowBonus),z.cols[0],z.cols[1]*2));
+    const rows=Math.round(clamp(rand(z.rows[0],z.rows[1])*(1+rowBonus*0.5),z.rows[0],z.rows[1]*1.5));
+    const spawnY=VANISH_Y+10;
     const rw=roadW(spawnY);
     for(let r=0;r<rows;r++){
       for(let c=0;c<cols;c++){
         const typeId=choose(z.types);
-        const x=clamp(roadLeft(spawnY)+(c/(cols-1||1))*rw+rand(-6,6),roadLeft(spawnY)+8,roadRight(spawnY)-8);
-        const y=spawnY-r*26;
+        const x=clamp(roadLeft(spawnY)+(c/(cols-1||1))*rw+rand(-5,5),roadLeft(spawnY)+6,roadRight(spawnY)-6);
+        const y=spawnY-r*22;
         this._spawnEnemy(typeId,x,y);
       }
     }
@@ -567,12 +590,17 @@ class GameScene extends Phaser.Scene {
       this.tweens.add({targets:this.playerGroup,scaleX:1.4,scaleY:1.4,duration:130,yoyo:true,ease:'Back.easeOut'});
     }
     else if(cfg.type==='wpn'){
-      if(cfg.stat==='dmg')   this.bulletDmg  =Math.ceil(this.bulletDmg*1.5);
-      if(cfg.stat==='rate')  this.fireDelay  =Math.max(120,Math.floor(this.fireDelay*0.70));
+      if(cfg.stat==='dmgS')  this.bulletDmg  =Math.ceil(this.bulletDmg*1.20);
+      if(cfg.stat==='dmgM')  this.bulletDmg  =Math.ceil(this.bulletDmg*1.40);
+      if(cfg.stat==='dmgL')  this.bulletDmg  =Math.ceil(this.bulletDmg*1.60);
+      if(cfg.stat==='rateS') this.fireDelay  =Math.max(100,Math.floor(this.fireDelay*0.85));
+      if(cfg.stat==='rateM') this.fireDelay  =Math.max(100,Math.floor(this.fireDelay*0.70));
+      if(cfg.stat==='rateL') this.fireDelay  =Math.max(100,Math.floor(this.fireDelay*0.55));
       if(cfg.stat==='pierce')this.pierce=true;
       if(cfg.stat==='spread')this.spread=true;
       SFX.gateWpn();
-      if(cfg.stat==='rate'&&this.shootTimer){ this.shootTimer.remove(false); this._startShootTimer(); }
+      const isRate=cfg.stat==='rateS'||cfg.stat==='rateM'||cfg.stat==='rateL';
+      if(isRate&&this.shootTimer){ this.shootTimer.remove(false); this._startShootTimer(); }
     }
     else if(cfg.type==='heal'){ this.soldierCount=Math.min(80,this.soldierCount+cfg.value); SFX.gateAdd(); }
     this._rebuildSoldiers();
@@ -812,8 +840,8 @@ class GameScene extends Phaser.Scene {
       duration:320, ease:'Back.easeIn',
       onComplete:()=>{ e.dead=true; e.dying=false; e.img.destroy(); }
     });
-    // AoE chain kill
-    const r=32; let chain=0;
+    // AoE chain kill (radius grows with weapon damage upgrades)
+    const r=36+Math.min(this.bulletDmg-1,6)*4; let chain=0;
     for(const ne of this.enemies){
       if(ne.dead||ne.dying||ne===e)continue;
       if(Math.abs(ne.img.x-e.img.x)<r&&Math.abs(ne.img.y-e.img.y)<r){ this._killEnemy(ne); chain++; }
