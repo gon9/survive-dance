@@ -307,39 +307,73 @@ class GameScene extends Phaser.Scene {
 
   _createBg(){
     this.add.rectangle(W/2,H/2,W,H,C.BG);
-    for(let i=0;i<35;i++){
-      const a=rand(1,5)/10;
-      const s=this.add.rectangle(rand(0,W),rand(0,H*0.55),rand(1,2),rand(1,2),0xffffff,a);
-      this.tweens.add({targets:s,alpha:0.04,duration:rand(800,2400),yoyo:true,repeat:-1,delay:rand(0,2000)});
+    // Sky gradient (red-orange glow near horizon = post-apocalyptic)
+    const sky=this.add.graphics();
+    sky.fillGradientStyle(0x1A0A00,0x1A0A00,C.BG,C.BG,0.55,0.55,0,0);
+    sky.fillRect(0,0,W,H*0.45);
+    // Stars
+    for(let i=0;i<55;i++){
+      const a=rand(1,6)/10;
+      const s=this.add.rectangle(rand(0,W),rand(0,H*0.50),rand(1,2),rand(1,2),0xffffff,a);
+      this.tweens.add({targets:s,alpha:0.04,duration:rand(700,2200),yoyo:true,repeat:-1,delay:rand(0,2000)});
     }
-    this.bgFar =this.add.tileSprite(W/2,H*0.12,W,200,'buildings-far').setAlpha(0.32);
-    this.bgNear=this.add.tileSprite(W/2,H*0.20,W,200,'buildings-near').setAlpha(0.40);
+    // Floating debris / smoke particles
+    for(let i=0;i<12;i++){
+      const p=this.add.rectangle(rand(0,W),rand(H*0.05,H*0.40),rand(2,5),rand(2,5),0x553322,rand(1,3)/10);
+      this.tweens.add({targets:p,x:p.x+rand(-60,60),y:p.y-rand(40,120),alpha:0,duration:rand(4000,8000),delay:rand(0,5000),repeat:-1,onRepeat:()=>{p.x=rand(0,W);p.y=rand(H*0.1,H*0.45);p.alpha=rand(1,3)/10;}});
+    }
+    this.bgFar =this.add.tileSprite(W/2,H*0.12,W,200,'buildings-far').setAlpha(0.38).setTint(0xFF8855);
+    this.bgNear=this.add.tileSprite(W/2,H*0.20,W,200,'buildings-near').setAlpha(0.45);
+    // Horizon glow
+    const hg=this.add.graphics();
+    hg.fillGradientStyle(0xFF4400,0xFF4400,0x070A18,0x070A18,0.16,0.16,0,0);
+    hg.fillRect(0,H*0.28,W,H*0.12);
   }
 
   _createRoad(){
     const g=this.add.graphics().setDepth(1);
-    g.fillStyle(C.ROAD,1);
+    // Road surface
+    g.fillStyle(0x090D1C,1);
     g.beginPath();
     g.moveTo(roadLeft(VANISH_Y),VANISH_Y); g.lineTo(roadRight(VANISH_Y),VANISH_Y);
     g.lineTo(roadRight(H),H);             g.lineTo(roadLeft(H),H);
     g.closePath(); g.fillPath();
-    // Horizon lines
-    for(let y=VANISH_Y+50;y<H;y+=55){
-      g.lineStyle(1,C.CYAN,pScale(y)*0.11);
-      g.lineBetween(roadLeft(y),y,roadRight(y),y);
+    // Darker center strip
+    g.fillStyle(0x060910,0.7);
+    g.beginPath();
+    g.moveTo(ROAD_CX-roadHalf(VANISH_Y)*0.18,VANISH_Y); g.lineTo(ROAD_CX+roadHalf(VANISH_Y)*0.18,VANISH_Y);
+    g.lineTo(ROAD_CX+roadHalf(H)*0.18,H); g.lineTo(ROAD_CX-roadHalf(H)*0.18,H);
+    g.closePath(); g.fillPath();
+    // Perspective grid lines
+    for(let y=VANISH_Y+45;y<H;y+=52){
+      const sc=pScale(y), a=sc*0.13;
+      g.lineStyle(1,C.CYAN,a); g.lineBetween(roadLeft(y),y,roadRight(y),y);
     }
-    g.lineStyle(1.5,C.CYAN,0.12); g.lineBetween(ROAD_CX,VANISH_Y,ROAD_CX,H);
+    // Dashed center lane markers
+    for(let y=VANISH_Y+60;y<H;y+=80){
+      const dashH=Math.max(4,pScale(y)*20);
+      g.fillStyle(0xFFFFFF,pScale(y)*0.12);
+      g.fillRect(ROAD_CX-1,y,2,dashH);
+    }
     // Edge glows
     const eL=this.add.graphics().setDepth(2), eR=this.add.graphics().setDepth(2);
-    eL.lineStyle(2.5,C.CYAN,0.55); eL.beginPath(); eL.moveTo(roadLeft(VANISH_Y),VANISH_Y); eL.lineTo(roadLeft(H),H); eL.strokePath();
-    eR.lineStyle(2.5,C.CYAN,0.55); eR.beginPath(); eR.moveTo(roadRight(VANISH_Y),VANISH_Y); eR.lineTo(roadRight(H),H); eR.strokePath();
-    this.tweens.add({targets:[eL,eR],alpha:0.18,duration:1400,yoyo:true,repeat:-1});
-    // Vanishing point glow
+    eL.lineStyle(3,C.CYAN,0.65); eL.beginPath(); eL.moveTo(roadLeft(VANISH_Y),VANISH_Y); eL.lineTo(roadLeft(H),H); eL.strokePath();
+    eR.lineStyle(3,C.CYAN,0.65); eR.beginPath(); eR.moveTo(roadRight(VANISH_Y),VANISH_Y); eR.lineTo(roadRight(H),H); eR.strokePath();
+    // Second softer edge
+    const eL2=this.add.graphics().setDepth(2), eR2=this.add.graphics().setDepth(2);
+    eL2.lineStyle(8,C.CYAN,0.08); eL2.beginPath(); eL2.moveTo(roadLeft(VANISH_Y),VANISH_Y); eL2.lineTo(roadLeft(H),H); eL2.strokePath();
+    eR2.lineStyle(8,C.CYAN,0.08); eR2.beginPath(); eR2.moveTo(roadRight(VANISH_Y),VANISH_Y); eR2.lineTo(roadRight(H),H); eR2.strokePath();
+    this.tweens.add({targets:[eL,eR],alpha:0.22,duration:1200,yoyo:true,repeat:-1});
+    // Vanishing point intense glow
     const vg=this.add.graphics().setDepth(2);
-    vg.fillStyle(C.CYAN,0.06); vg.fillCircle(ROAD_CX,VANISH_Y,40);
+    vg.fillStyle(0xFF6600,0.12); vg.fillCircle(ROAD_CX,VANISH_Y,55);
+    vg.fillStyle(C.CYAN,0.08);  vg.fillCircle(ROAD_CX,VANISH_Y,30);
   }
 
   _createPlayer(){
+    // Glow aura behind squad
+    this.playerGlow=this.add.ellipse(this.playerX,PLAYER_Y,220,70,C.CYAN,0.10).setDepth(13);
+    this.tweens.add({targets:this.playerGlow,alpha:0.04,scaleX:1.15,scaleY:1.15,duration:900,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
     this.playerGroup=this.add.container(this.playerX,PLAYER_Y).setDepth(15);
     this.soldierImgs=[];
     this._rebuildSoldiers();
@@ -458,7 +492,9 @@ class GameScene extends Phaser.Scene {
     const sc=pScale(y)*def.scale;
     const img=this.add.image(x,y,'zombie').setScale(sc).setTint(def.tint).setDepth(8+Math.random()*2);
     this.tweens.add({targets:img,angle:rand(-7,7),duration:240+rand(0,80),yoyo:true,repeat:-1});
-    const e={id:this.eid++,img,speed:def.speed,hp:def.hp,hpMax:def.hp,baseScale:def.scale,dead:false,type:typeId,hpBar:null,hpBg:null};
+    img.setAlpha(0);
+    this.tweens.add({targets:img,alpha:1,duration:200});
+    const e={id:this.eid++,img,speed:def.speed,hp:def.hp,hpMax:def.hp,baseScale:def.scale,dead:false,dying:false,type:typeId,hpBar:null,hpBg:null};
     if(typeId==='tank'){
       e.hpBg =this.add.rectangle(x,y-22,32,5,0x440000).setDepth(11);
       e.hpBar=this.add.rectangle(x-16,y-22,32,5,0xFF2222).setOrigin(0,0.5).setDepth(12);
@@ -637,9 +673,13 @@ class GameScene extends Phaser.Scene {
 
   _spawnBullet(x,y,ao){
     const col=this.pierce?C.PURPLE:this.spread?C.GOLD:C.CYAN;
-    const img  =this.add.rectangle(x,y,5,16,col).setDepth(16);
-    const trail=this.add.rectangle(x,y+10,3,8,col,0.5).setDepth(15);
-    this.bullets.push({img,trail,sx:Math.sin(ao)*11,sy:-Math.cos(ao)*12,dmg:this.bulletDmg,pierce:this.pierce,hits:new Set(),hitBoss:false});
+    // Glow halo
+    const glow =this.add.rectangle(x,y,10,28,col,0.22).setDepth(15);
+    // Core bullet
+    const img  =this.add.rectangle(x,y,5,20,col).setDepth(16);
+    // Trail
+    const trail=this.add.rectangle(x,y+14,3,10,col,0.45).setDepth(15);
+    this.bullets.push({img,trail,glow,sx:Math.sin(ao)*11,sy:-Math.cos(ao)*12,dmg:this.bulletDmg,pierce:this.pierce,hits:new Set(),hitBoss:false});
   }
 
   // ===== SKILL =====
@@ -655,9 +695,9 @@ class GameScene extends Phaser.Scene {
     }
     const fl=this.add.rectangle(W/2,H/2,W,H,C.GOLD,0.22).setDepth(39);
     this.tweens.add({targets:fl,alpha:0,duration:200,onComplete:()=>fl.destroy()});
-    // Kill enemies in radius
+    // Kill enemies in radius (with death animation)
     for(const e of this.enemies){
-      if(!e.dead&&Math.hypot(e.img.x-tx,e.img.y-ty)<SKILL_R){ e.dead=true; this._killFX(e.img.x,e.img.y); }
+      if(!e.dead&&!e.dying&&Math.hypot(e.img.x-tx,e.img.y-ty)<SKILL_R) this._killEnemy(e);
     }
     // Boss damage
     if(this.boss&&!this.boss.dead){
@@ -687,13 +727,14 @@ class GameScene extends Phaser.Scene {
     this.bgNear.tilePositionY-=SCROLL_SPEED*0.25;
     this.playerX+=(this.targetX-this.playerX)*0.14;
     this.playerGroup.x=this.playerX;
+    this.playerGlow.x=this.playerX;
     for(const s of this.soldierImgs) s.img.y=s.baseY+Math.sin(time*0.006+s.ph)*2.5;
     this._updateBullets();
     this._updateEnemies();
-    // Clean dead enemies
+    // Remove fully dead enemies (dying ones clean themselves up via tween onComplete)
     for(let i=this.enemies.length-1;i>=0;i--){
       const e=this.enemies[i];
-      if(e.dead){ if(e.hpBar){e.hpBar.destroy();e.hpBg.destroy();} e.img.destroy(); this.enemies.splice(i,1); }
+      if(e.dead&&!e.dying){ if(e.hpBar){e.hpBar.destroy();e.hpBg.destroy();} this.enemies.splice(i,1); }
     }
     this._updateGates();
     if(this.phase==='boss'){ this._updateBoss(delta); this._updateBossBullets(); }
@@ -703,19 +744,26 @@ class GameScene extends Phaser.Scene {
     for(let j=this.bullets.length-1;j>=0;j--){
       const b=this.bullets[j];
       b.img.x+=b.sx; b.img.y+=b.sy;
-      b.trail.x=b.img.x; b.trail.y=b.img.y+10;
-      if(b.img.y<-20){ b.img.destroy();b.trail.destroy();this.bullets.splice(j,1);continue; }
+      b.trail.x=b.img.x; b.trail.y=b.img.y+14;
+      b.glow.x =b.img.x; b.glow.y =b.img.y;
+      if(b.img.y<-20){ b.img.destroy();b.trail.destroy();b.glow.destroy();this.bullets.splice(j,1);continue; }
       let dead=false;
       // Enemy collision
       for(let i=this.enemies.length-1;i>=0;i--){
         const e=this.enemies[i];
-        if(e.dead||b.hits.has(e.id))continue;
+        if(e.dead||e.dying||b.hits.has(e.id))continue;
         if(Math.abs(b.img.x-e.img.x)<18&&Math.abs(b.img.y-e.img.y)<22){
           b.hits.add(e.id);
           e.hp-=b.dmg;
           if(e.hpBar) e.hpBar.width=32*Math.max(0,e.hp/e.hpMax);
-          if(e.hp<=0) this._killEnemy(e);
-          if(!b.pierce){ b.img.destroy();b.trail.destroy();this.bullets.splice(j,1);dead=true;break; }
+          if(e.hp<=0){
+            this._killEnemy(e);
+          } else {
+            // Hit flash
+            e.img.setTint(0xFFFFFF);
+            this.time.delayedCall(90,()=>{ if(!e.dead&&!e.dying) e.img.setTint(ENEMY_TYPES[e.type].tint); });
+          }
+          if(!b.pierce){ b.img.destroy();b.trail.destroy();b.glow.destroy();this.bullets.splice(j,1);dead=true;break; }
         }
       }
       if(dead)continue;
@@ -727,7 +775,7 @@ class GameScene extends Phaser.Scene {
           this._updateBossHpBar();
           this._bossDmgFX(this.boss.img.x,this.boss.y);
           if(this.boss.hp<=0){ this.boss.dead=true; this._endGame(true); return; }
-          if(!b.pierce){ b.img.destroy();b.trail.destroy();this.bullets.splice(j,1); }
+          if(!b.pierce){ b.img.destroy();b.trail.destroy();b.glow.destroy();this.bullets.splice(j,1); }
         }
       }
     }
@@ -735,44 +783,53 @@ class GameScene extends Phaser.Scene {
 
   _updateEnemies(){
     for(const e of this.enemies){
-      if(e.dead)continue;
+      if(e.dead||e.dying)continue;
       e.img.y+=e.speed;
       const sc=pScale(e.img.y)*e.baseScale;
       e.img.setScale(sc);
       if(e.hpBar){ e.hpBg.x=e.img.x; e.hpBg.y=e.img.y-22; e.hpBar.x=e.img.x-16; e.hpBar.y=e.img.y-22; }
-      if(e.img.y>PLAYER_Y+20){ e.dead=true; this._killFX(e.img.x,e.img.y); this._onSoldierHit(); }
+      if(e.img.y>PLAYER_Y+20){ this._killEnemy(e); this._onSoldierHit(); }
     }
   }
 
   // ===== COMBAT HELPERS =====
   _killEnemy(e){
-    if(e.dead)return;
-    e.dead=true; SFX.kill(); this._killFX(e.img.x,e.img.y);
-    // AoE chain
-    const r=30; let chain=0;
+    if(e.dead||e.dying)return;
+    e.dying=true; SFX.kill();
+    // Hide HP bar immediately
+    if(e.hpBar){ e.hpBar.destroy(); e.hpBg.destroy(); e.hpBar=null; e.hpBg=null; }
+    // Color-coded death particles
+    const cols=e.type==='tank'?[0xFF5533,0xFF9944,0xFFCC55]:e.type==='runner'?[0xFF8866,0xFF6644,0xFF4422]:[0x66FF99,0x33EE77,0xAAFFCC];
+    for(let i=0;i<14;i++){
+      const ang=Math.random()*Math.PI*2, spd=18+Math.random()*50;
+      const p=this.add.rectangle(e.img.x+rand(-6,6),e.img.y+rand(-6,6),rand(5,11),rand(4,9),choose(cols)).setDepth(12);
+      this.tweens.add({targets:p,x:p.x+Math.cos(ang)*spd,y:p.y+Math.sin(ang)*spd-8,alpha:0,angle:rand(-180,180),duration:380+rand(0,200),onComplete:()=>p.destroy()});
+    }
+    // Sprite death animation: scale-down + fade + slight upward drift
+    this.tweens.add({
+      targets:e.img,
+      scaleX:0, scaleY:0, alpha:0, y:e.img.y-22,
+      duration:320, ease:'Back.easeIn',
+      onComplete:()=>{ e.dead=true; e.dying=false; e.img.destroy(); }
+    });
+    // AoE chain kill
+    const r=32; let chain=0;
     for(const ne of this.enemies){
-      if(ne.dead||ne===e)continue;
-      if(Math.abs(ne.img.x-e.img.x)<r&&Math.abs(ne.img.y-e.img.y)<r){ ne.dead=true; this._killFX(ne.img.x,ne.img.y); chain++; }
+      if(ne.dead||ne.dying||ne===e)continue;
+      if(Math.abs(ne.img.x-e.img.x)<r&&Math.abs(ne.img.y-e.img.y)<r){ this._killEnemy(ne); chain++; }
     }
     if(chain>=3) this._sweepFX(e.img.x,e.img.y,chain);
   }
 
-  _killFX(x,y){
-    for(let i=0;i<5;i++){
-      const ang=Math.random()*Math.PI*2, spd=12+Math.random()*28;
-      const p=this.add.rectangle(x+rand(-4,4),y,rand(3,7),rand(3,6),choose([0x44FF88,0x22CC66,0x88FFAA])).setDepth(11);
-      this.tweens.add({targets:p,x:p.x+Math.cos(ang)*spd,y:p.y+Math.sin(ang)*spd,alpha:0,duration:200+rand(0,100),onComplete:()=>p.destroy()});
-    }
-  }
-
   _sweepFX(x,y,count){
-    const ring=this.add.graphics().setDepth(12);
-    ring.lineStyle(3,C.TEAL,0.9); ring.strokeCircle(x,y,10);
-    this.tweens.add({targets:ring,scaleX:5,scaleY:5,alpha:0,duration:340,onComplete:()=>ring.destroy()});
-    if(count>=4){
-      const txt=this.add.text(x,y-8,'×'+(count+1)+' SWEEP!',{fontSize:'15px',fontFamily:FH,color:toHex(C.GOLD),stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(50);
-      this.tweens.add({targets:txt,y:y-55,alpha:0,duration:680,ease:'Power2',onComplete:()=>txt.destroy()});
+    for(let r=0;r<2;r++){
+      const ring=this.add.graphics().setDepth(12);
+      ring.lineStyle(3-r*0.5,r===0?C.TEAL:C.GOLD,0.9-r*0.3);
+      ring.strokeCircle(x,y,10+r*5);
+      this.tweens.add({targets:ring,scaleX:5+r*2,scaleY:5+r*2,alpha:0,duration:320+r*80,delay:r*50,onComplete:()=>ring.destroy()});
     }
+    const txt=this.add.text(x,y-10,count>=6?'💥 SWEEP! ×'+(count+1):'SWEEP! ×'+(count+1),{fontSize:count>=6?'18px':'15px',fontFamily:FH,color:toHex(C.GOLD),stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(50);
+    this.tweens.add({targets:txt,y:y-60,alpha:0,duration:700,ease:'Power2',onComplete:()=>txt.destroy()});
   }
 
   _bossDmgFX(x,y){
@@ -827,8 +884,8 @@ class GameScene extends Phaser.Scene {
     if(this.spawnTimer)this.spawnTimer.remove();
     if(this.zoneTimer) this.zoneTimer.remove();
     if(this.shootTimer)this.shootTimer.remove();
-    for(const b of this.bullets){ b.img.destroy(); b.trail.destroy(); }
-    for(const e of this.enemies){ e.img.destroy(); if(e.hpBar){e.hpBar.destroy();e.hpBg.destroy();} }
+    for(const b of this.bullets){ b.img.destroy(); b.trail.destroy(); b.glow.destroy(); }
+    for(const e of this.enemies){ this.tweens.killTweensOf(e.img); if(e.img&&e.img.scene)e.img.destroy(); if(e.hpBar){e.hpBar.destroy();e.hpBg.destroy();} }
     for(const b of this.bossBullets) b.img.destroy();
     for(const p of this.gatePairs) this._destroyGatePair(p);
     this.bullets=[]; this.enemies=[]; this.bossBullets=[]; this.gatePairs=[];
