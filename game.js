@@ -21,16 +21,15 @@ const FB = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif';
 
 // ===== GAME DATA =====
 const ENEMY_TYPES = {
-  normal: { hp:1,   speed:0.85, scale:0.22, tint:0xFFFFFF },
-  runner: { hp:1,   speed:2.2,  scale:0.17, tint:0xFF8866 },
-  tank:   { hp:6,   speed:0.40, scale:0.38, tint:0xCC4444 },
+  normal: { hp:1,   speed:0.85, scale:0.30, tint:0xFFFFFF },
+  runner: { hp:1,   speed:2.2,  scale:0.24, tint:0xFF8866 },
+  tank:   { hp:6,   speed:0.40, scale:0.46, tint:0xCC4444 },
   boss:   { hp:250, speed:0.28, scale:1.30, tint:0xFF1111 },
 };
-// Cols/rows grow mid-zone: waveNum tracked per zone
 const ZONES = [
-  { duration:16000, interval:1500, cols:[6,8],  rows:[2,3], types:['normal'],                 rowScale:0.20 },
-  { duration:14000, interval:1200, cols:[9,12], rows:[3,4], types:['normal','runner'],         rowScale:0.25 },
-  { duration:12000, interval:1000, cols:[12,16],rows:[4,6], types:['normal','runner','tank'],  rowScale:0.30 },
+  { duration:16000, interval:1600, cols:[5,8],  rows:[2,3], types:['normal']                },
+  { duration:14000, interval:1300, cols:[7,10], rows:[2,4], types:['normal','runner']        },
+  { duration:12000, interval:1100, cols:[9,13], rows:[3,5], types:['normal','runner','tank'] },
 ];
 const BOSS_ZONE = 3;
 
@@ -492,12 +491,12 @@ class GameScene extends Phaser.Scene {
 
   _spawnWave(zoneIdx){
     if(this.phase!=='run')return;
+    const alive=this.enemies.filter(e=>!e.dead&&!e.dying).length;
+    if(alive>=90)return;
     const z=ZONES[zoneIdx];
     this.waveNum++;
-    // Intra-zone scaling: every 3 waves, cols/rows grow slightly
-    const rowBonus=Math.floor(this.waveNum/3)*z.rowScale;
-    const cols=Math.round(clamp(rand(z.cols[0],z.cols[1])*(1+rowBonus),z.cols[0],z.cols[1]*2));
-    const rows=Math.round(clamp(rand(z.rows[0],z.rows[1])*(1+rowBonus*0.5),z.rows[0],z.rows[1]*1.5));
+    const cols=rand(z.cols[0],z.cols[1]);
+    const rows=rand(z.rows[0],z.rows[1]);
     const spawnY=VANISH_Y+10;
     const rw=roadW(spawnY);
     for(let r=0;r<rows;r++){
@@ -586,7 +585,7 @@ class GameScene extends Phaser.Scene {
   _applyGate(cfg){
     if(cfg.type==='add'){ this.soldierCount=clamp(this.soldierCount+cfg.value,1,80); SFX.gateAdd(); }
     else if(cfg.type==='mul'){
-      this.soldierCount=clamp(this.soldierCount*cfg.value,1,80); SFX.gateMul();
+      this.soldierCount=clamp(Math.round(this.soldierCount*cfg.value),1,80); SFX.gateMul();
       this.tweens.add({targets:this.playerGroup,scaleX:1.4,scaleY:1.4,duration:130,yoyo:true,ease:'Back.easeOut'});
     }
     else if(cfg.type==='wpn'){
